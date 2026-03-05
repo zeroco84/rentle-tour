@@ -63,6 +63,7 @@ struct ScanningScreen: View {
     @State private var showCaptureFlash = false
     @State private var showObjectCapture = false
     @State private var captureView: RoomCaptureView?
+    @State private var showInstructions = true
 
     var body: some View {
         ZStack {
@@ -120,48 +121,100 @@ struct ScanningScreen: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
 
+                // ── Instructions banner (auto-fades) ──
+                if showInstructions && !scanComplete {
+                    VStack(spacing: 4) {
+                        Text("// slowly walk through the room")
+                            .font(.custom("Courier", size: 12))
+                            .foregroundStyle(RentleBrand.textPrimary)
+                            .tracking(0.5)
+                        Text("tap capture_360° at key viewpoints")
+                            .font(.custom("Courier", size: 11))
+                            .foregroundStyle(RentleBrand.textSecondary)
+                            .tracking(0.5)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(RentleBrand.background.opacity(0.85))
+                    .overlay(Rectangle().stroke(RentleBrand.border, lineWidth: 1))
+                    .padding(.horizontal, 32)
+                    .padding(.top, 8)
+                    .transition(.opacity)
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+                            withAnimation(.easeOut(duration: 0.5)) {
+                                showInstructions = false
+                            }
+                        }
+                    }
+                }
+
                 Spacer()
 
-                // ── 360° Capture Button (during active scan) ──
+                // ── 360° Capture Button + Done Button (during active scan) ──
                 if !scanComplete {
-                    HStack(spacing: 12) {
-                        // Capture 360° View button
-                        Button(action: capture360Node) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "camera.circle.fill")
-                                    .font(.system(size: 18))
-                                Text("capture_360°")
-                                    .font(.custom("Courier", size: 12).weight(.bold))
-                                    .tracking(1)
-                            }
-                            .foregroundStyle(RentleBrand.green)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(RentleBrand.background.opacity(0.85))
-                            .overlay(
-                                Rectangle()
-                                    .stroke(RentleBrand.green.opacity(0.6), lineWidth: 1)
-                            )
-                        }
-                        .disabled(scanManager.spatialCapture.isCapturing)
-
-                        // Node count indicator
-                        if scanManager.spatialCapture.capturedNodeCount > 0 {
-                            Text("[\(scanManager.spatialCapture.capturedNodeCount)]")
-                                .font(.custom("Courier", size: 12))
+                    VStack(spacing: 10) {
+                        // 360° capture row
+                        HStack(spacing: 12) {
+                            // Capture 360° View button
+                            Button(action: capture360Node) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "camera.circle.fill")
+                                        .font(.system(size: 18))
+                                    Text("capture_360°")
+                                        .font(.custom("Courier", size: 12).weight(.bold))
+                                        .tracking(1)
+                                }
                                 .foregroundStyle(RentleBrand.green)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(RentleBrand.background.opacity(0.85))
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(RentleBrand.green.opacity(0.6), lineWidth: 1)
+                                )
+                            }
+                            .disabled(scanManager.spatialCapture.isCapturing)
+
+                            // Node count indicator
+                            let nodeCount = scanManager.spatialCapture.capturedNodeCount
+                            Text("[\(nodeCount)] node\(nodeCount == 1 ? "" : "s")")
+                                .font(.custom("Courier", size: 12))
+                                .foregroundStyle(nodeCount > 0 ? RentleBrand.green : RentleBrand.textMuted)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 8)
                                 .background(RentleBrand.background.opacity(0.85))
                                 .overlay(
                                     Rectangle()
-                                        .stroke(RentleBrand.green.opacity(0.3), lineWidth: 1)
+                                        .stroke(
+                                            nodeCount > 0
+                                                ? RentleBrand.green.opacity(0.3)
+                                                : RentleBrand.border,
+                                            lineWidth: 1
+                                        )
                                 )
-                                .transition(.scale.combined(with: .opacity))
                         }
+                        .animation(.easeOut(duration: 0.2), value: scanManager.spatialCapture.capturedNodeCount)
+
+                        // Node guidance hint
+                        Text(nodeGuidanceText)
+                            .font(.custom("Courier", size: 10))
+                            .foregroundStyle(RentleBrand.textMuted)
+                            .tracking(0.5)
+
+                        // ── Done Scanning button ──
+                        Button(action: finishScanning) {
+                            Text("done_scanning />")
+                                .font(.custom("Courier", size: 14).weight(.bold))
+                                .foregroundStyle(RentleBrand.background)
+                                .tracking(2)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color(hex: "E8E6E3"))
+                        }
+                        .padding(.horizontal, 20)
                     }
                     .padding(.bottom, 8)
-                    .animation(.easeOut(duration: 0.2), value: scanManager.spatialCapture.capturedNodeCount)
                 }
 
                 // Status indicator
@@ -188,7 +241,7 @@ struct ScanningScreen: View {
                 )
                 .padding(.bottom, 8)
 
-                // ── Bottom action bar (after scan) ──
+                // ── Bottom action bar (after scan completes) ──
                 if scanComplete {
                     VStack(spacing: 12) {
                         Text("// scan captured successfully")
@@ -253,6 +306,33 @@ struct ScanningScreen: View {
         } message: {
             Text(scanManager.alertMessage ?? "An unknown error occurred.")
         }
+    }
+
+    // MARK: - Node Guidance Text
+
+    private var nodeGuidanceText: String {
+        let count = scanManager.spatialCapture.capturedNodeCount
+        if count == 0 {
+            return "// capture 3-5 nodes for best results"
+        } else if count < 3 {
+            return "// \(3 - count) more recommended (3-5 optimal)"
+        } else if count <= 5 {
+            return "// ✓ good coverage — add more or tap done"
+        } else {
+            return "// ✓ excellent coverage"
+        }
+    }
+
+    // MARK: - Finish Scanning
+
+    private func finishScanning() {
+        // Haptic feedback
+        let impact = UIImpactFeedbackGenerator(style: .heavy)
+        impact.impactOccurred()
+
+        // Stop the RoomCaptureSession — this triggers the delegate
+        // which will process the scan and call onScanFinished
+        captureView?.captureSession.stop()
     }
 
     // MARK: - Capture 360° Node
