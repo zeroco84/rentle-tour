@@ -139,7 +139,8 @@ struct ContentView: View {
                         if let idx = activePropertyIndex {
                             properties[idx].roomCount = scanManager.capturedRooms.count
                         }
-                        if !scanManager.capturedRooms.isEmpty {
+                        // Show review if rooms were captured OR nodes were captured
+                        if !scanManager.capturedRooms.isEmpty || !scanManager.tourBundle.nodes.isEmpty {
                             showReview = true
                         }
                     }
@@ -460,11 +461,14 @@ struct ReviewScreen: View {
                             .foregroundStyle(RentleBrand.textSecondary)
                             .tracking(1.5)
 
-                        Text("\(scanManager.capturedRooms.count) room(s) captured")
+                        let roomCount = scanManager.capturedRooms.count
+                        let nodeCount = scanManager.tourBundle.nodes.count
+
+                        Text("\(roomCount) room\(roomCount == 1 ? "" : "s"), \(nodeCount) node\(nodeCount == 1 ? "" : "s")")
                             .font(.system(size: 20, weight: .regular, design: .monospaced))
                             .foregroundStyle(RentleBrand.textPrimary)
 
-                        Text("merge rooms into a single 3D model\nand export as .usdz")
+                        Text("tap merge_and_export to\nbuild the 3D model")
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundStyle(RentleBrand.textSecondary)
                             .multilineTextAlignment(.center)
@@ -473,35 +477,52 @@ struct ReviewScreen: View {
                     .padding(.top, 32)
                     .padding(.bottom, 24)
 
-                    // Room list in terminal container
+                    // ── Action buttons FIRST (above the fold) ──
+                    actionButtons
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+
+                    // ── Room list in terminal container ──
                     VStack(spacing: 0) {
                         HStack {
-                            Text("> scan_results[]")
-                                .font(.system(size: 11, design: .monospaced))
+                            Text("> scan_results[\(scanManager.capturedRooms.count)]")
+                                .font(.custom("Courier", size: 11))
                                 .foregroundStyle(RentleBrand.textSecondary)
                                 .tracking(1)
                             Spacer()
+                            if scanManager.capturedRooms.isEmpty {
+                                Text("pending")
+                                    .font(.custom("Courier", size: 11))
+                                    .foregroundStyle(RentleBrand.orange)
+                                    .tracking(1)
+                            }
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
 
-                        ScrollView {
-                            LazyVStack(spacing: 1) {
-                                ForEach(Array(scanManager.capturedRooms.enumerated()), id: \.offset) { index, _ in
-                                    HStack(spacing: 12) {
-                                        Text("✓")
-                                            .foregroundStyle(RentleBrand.green)
-                                        Text("room_\(index + 1)")
-                                            .foregroundStyle(RentleBrand.textPrimary)
-                                        Spacer()
-                                        Text("captured")
-                                            .foregroundStyle(RentleBrand.green.opacity(0.6))
-                                    }
-                                    .font(.system(size: 13, design: .monospaced))
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 10)
-                                    .background(RentleBrand.surface)
+                        if scanManager.capturedRooms.isEmpty {
+                            // Guidance when no rooms are captured
+                            Text("// room data processed on merge")
+                                .font(.custom("Courier", size: 11))
+                                .foregroundStyle(RentleBrand.textMuted)
+                                .tracking(0.5)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 10)
+                        } else {
+                            ForEach(Array(scanManager.capturedRooms.enumerated()), id: \.offset) { index, _ in
+                                HStack(spacing: 12) {
+                                    Text("✓")
+                                        .foregroundStyle(RentleBrand.green)
+                                    Text("room_\(index + 1)")
+                                        .foregroundStyle(RentleBrand.textPrimary)
+                                    Spacer()
+                                    Text("captured")
+                                        .foregroundStyle(RentleBrand.green.opacity(0.6))
                                 }
+                                .font(.custom("Courier", size: 13))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(RentleBrand.surface)
                             }
                         }
                     }
@@ -512,265 +533,20 @@ struct ReviewScreen: View {
                     )
                     .padding(.horizontal, 16)
 
-                    // Tour nodes summary (if any captured)
+                    // Tour nodes summary (collapsed list with toggle)
                     if !scanManager.tourBundle.nodes.isEmpty {
-                        VStack(spacing: 0) {
-                            HStack {
-                                Text("> tour_nodes[]")
-                                    .font(.custom("Courier", size: 11))
-                                    .foregroundStyle(RentleBrand.textSecondary)
-                                    .tracking(1)
-                                Spacer()
-                                Text("\(scanManager.tourBundle.nodes.count) captured")
-                                    .font(.custom("Courier", size: 11))
-                                    .foregroundStyle(RentleBrand.green.opacity(0.6))
-                                    .tracking(1)
-                            }
+                        tourNodesSummary
                             .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
+                            .padding(.top, 12)
+                    }
 
-                            ForEach(scanManager.tourBundle.nodes) { node in
-                                HStack(spacing: 12) {
-                                    Text("◉")
-                                        .foregroundStyle(RentleBrand.green)
-                                    Text(node.label.lowercased().replacingOccurrences(of: " ", with: "_"))
-                                        .foregroundStyle(RentleBrand.textPrimary)
-                                    Spacer()
-                                    Text("(\(String(format: "%.1f", node.positionX)), \(String(format: "%.1f", node.positionY)), \(String(format: "%.1f", node.positionZ)))")
-                                        .foregroundStyle(RentleBrand.textMuted)
-                                }
-                                .font(.custom("Courier", size: 12))
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(RentleBrand.surface)
-                            }
-                        }
-                        .background(RentleBrand.surface)
-                        .overlay(
-                            Rectangle()
-                                .stroke(RentleBrand.border, lineWidth: 1)
-                        )
+                    // ── Action buttons (repeated at bottom for long scrolls) ──
+                    actionButtons
                         .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                    }
-
-                    Spacer()
-
-                    // Action buttons
-                    VStack(spacing: 12) {
-                        // Merge & Export USDZ
-                        Button {
-                            Task {
-                                await scanManager.mergeRooms()
-                                await scanManager.exportUSDZ()
-                                if let url = scanManager.exportedFileURL {
-                                    onExportComplete?(url)
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 8) {
-                                if scanManager.isMerging || scanManager.isExporting {
-                                    ProgressView()
-                                        .tint(RentleBrand.background)
-                                        .scaleEffect(0.8)
-                                }
-                                Text(scanManager.isMerging ? "merging..." :
-                                        scanManager.isExporting ? "exporting..." : "merge_and_export />")
-                                    .tracking(2)
-                            }
-                            .font(.custom("Courier", size: 14).weight(.bold))
-                            .foregroundStyle(RentleBrand.background)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(Color(hex: "E8E6E3"))
-                        }
-                        .disabled(scanManager.isMerging || scanManager.isExporting)
-
-                        // Export Tour Bundle (only if nodes exist)
-                        if !scanManager.tourBundle.nodes.isEmpty && scanManager.exportedFileURL != nil {
-                            Button {
-                                Task {
-                                    await scanManager.exportTourBundle(propertyName: "Property")
-                                }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "cube.transparent")
-                                        .font(.system(size: 14))
-                                    Text("export_tour_bundle />")
-                                        .tracking(2)
-                                }
-                                .font(.custom("Courier", size: 14).weight(.bold))
-                                .foregroundStyle(RentleBrand.green)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .overlay(
-                                    Rectangle()
-                                        .stroke(RentleBrand.green, lineWidth: 1)
-                                )
-                            }
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                        }
-
-                        // View in Dollhouse (after export)
-                        if scanManager.exportedFileURL != nil {
-                            Button {
-                                showDollhouse = true
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "view.3d")
-                                        .font(.system(size: 14))
-                                    Text("view_dollhouse />")
-                                        .tracking(2)
-                                }
-                                .font(.custom("Courier", size: 14).weight(.bold))
-                                .foregroundStyle(RentleBrand.blue)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .overlay(
-                                    Rectangle()
-                                        .stroke(RentleBrand.blue, lineWidth: 1)
-                                )
-                            }
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                        }
-
-                        // ── Upload to Backend (primary action after export) ──
-                        if scanManager.exportedFileURL != nil && scanManager.selectedApartmentId != nil {
-                            VStack(spacing: 8) {
-                                if scanManager.uploadStatus == .uploaded {
-                                    // Success state
-                                    HStack(spacing: 8) {
-                                        Text("✓")
-                                            .foregroundStyle(RentleBrand.green)
-                                        Text("uploaded to server")
-                                            .foregroundStyle(RentleBrand.green)
-                                            .tracking(1)
-                                    }
-                                    .font(.custom("Courier", size: 14).weight(.bold))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 14)
-                                    .background(RentleBrand.green.opacity(0.1))
-                                    .overlay(
-                                        Rectangle()
-                                            .stroke(RentleBrand.green.opacity(0.5), lineWidth: 1)
-                                    )
-                                } else {
-                                    Button {
-                                        Task {
-                                            let token = authManager.authToken ?? ""
-                                            let baseURL = authManager.activeBaseURL
-                                            await scanManager.uploadTour(token: token, baseURL: baseURL)
-                                            if scanManager.uploadStatus == .uploaded {
-                                                onUploadComplete?()
-                                            }
-                                        }
-                                    } label: {
-                                        Group {
-                                            if scanManager.isUploading {
-                                                HStack(spacing: 12) {
-                                                    ProgressView()
-                                                        .tint(RentleBrand.green)
-                                                        .scaleEffect(0.8)
-                                                    Text("uploading...")
-                                                        .font(.custom("Courier", size: 14))
-                                                        .foregroundStyle(RentleBrand.textSecondary)
-                                                        .tracking(2)
-                                                }
-                                            } else {
-                                                Text("upload_tour />")
-                                                    .font(.custom("Courier", size: 14).weight(.bold))
-                                                    .foregroundStyle(RentleBrand.background)
-                                                    .tracking(2)
-                                            }
-                                        }
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 14)
-                                        .background(scanManager.isUploading ? Color(hex: "1A1A1A") : Color(hex: "E8E6E3"))
-                                        .overlay(
-                                            Rectangle().stroke(
-                                                scanManager.isUploading ? RentleBrand.border : Color(hex: "E8E6E3"),
-                                                lineWidth: 1
-                                            )
-                                        )
-                                    }
-                                    .disabled(scanManager.isUploading)
-                                }
-
-                                // Upload error message
-                                if let uploadErr = scanManager.uploadError {
-                                    HStack(spacing: 0) {
-                                        Text("✗ ")
-                                            .font(.custom("Courier", size: 14))
-                                            .foregroundStyle(Color(hex: "CF6679"))
-                                        Text(uploadErr)
-                                            .font(.custom("Courier", size: 12))
-                                            .foregroundStyle(Color(hex: "CF6679"))
-                                            .tracking(0.5)
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 10)
-                                    .background(Color(hex: "CF6679").opacity(0.05))
-                                    .overlay(Rectangle().stroke(Color(hex: "CF6679").opacity(0.4), lineWidth: 1))
-                                }
-                            }
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                        }
-
-                        // Share buttons row
-                        if scanManager.exportedFileURL != nil {
-                            HStack(spacing: 12) {
-                                // Share USDZ
-                                Button {
-                                    scanManager.presentShareSheet()
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Text("↑")
-                                        Text("share_file")
-                                            .tracking(1)
-                                    }
-                                    .font(.custom("Courier", size: 12).weight(.bold))
-                                    .foregroundStyle(RentleBrand.textSecondary)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .overlay(
-                                        Rectangle()
-                                            .stroke(RentleBrand.border, lineWidth: 1)
-                                    )
-                                }
-
-                                // Share Tour Bundle
-                                if scanManager.exportedTourURL != nil {
-                                    Button {
-                                        if let url = scanManager.exportedTourURL {
-                                            TourBundleExporter.share(url: url)
-                                        }
-                                    } label: {
-                                        HStack(spacing: 6) {
-                                            Text("↑")
-                                            Text("share_tour")
-                                                .tracking(1)
-                                        }
-                                        .font(.custom("Courier", size: 12).weight(.bold))
-                                        .foregroundStyle(RentleBrand.green)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 12)
-                                        .overlay(
-                                            Rectangle()
-                                                .stroke(RentleBrand.green.opacity(0.5), lineWidth: 1)
-                                        )
-                                    }
-                                    .transition(.scale.combined(with: .opacity))
-                                }
-                            }
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 30)
-                    .animation(.easeOut(duration: 0.3), value: scanManager.exportedFileURL != nil)
-                    .animation(.easeOut(duration: 0.3), value: scanManager.exportedTourURL != nil)
-                    .animation(.easeOut(duration: 0.3), value: scanManager.uploadStatus)
+                        .padding(.bottom, 30)
+                        .animation(.easeOut(duration: 0.3), value: scanManager.exportedFileURL != nil)
+                        .animation(.easeOut(duration: 0.3), value: scanManager.exportedTourURL != nil)
+                        .animation(.easeOut(duration: 0.3), value: scanManager.uploadStatus)
                 }
             }
             .navigationTitle("")
@@ -806,6 +582,256 @@ struct ReviewScreen: View {
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    // MARK: - Action Buttons
+
+    private var actionButtons: some View {
+        VStack(spacing: 12) {
+            // Merge & Export USDZ
+            Button {
+                Task {
+                    await scanManager.mergeRooms()
+                    await scanManager.exportUSDZ()
+                    if let url = scanManager.exportedFileURL {
+                        onExportComplete?(url)
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    if scanManager.isMerging || scanManager.isExporting {
+                        ProgressView()
+                            .tint(RentleBrand.background)
+                            .scaleEffect(0.8)
+                    }
+                    Text(scanManager.isMerging ? "merging..." :
+                            scanManager.isExporting ? "exporting..." : "merge_and_export />")
+                        .tracking(2)
+                }
+                .font(.custom("Courier", size: 14).weight(.bold))
+                .foregroundStyle(RentleBrand.background)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color(hex: "E8E6E3"))
+            }
+            .disabled(scanManager.isMerging || scanManager.isExporting)
+
+            // View in Dollhouse (after export)
+            if scanManager.exportedFileURL != nil {
+                Button {
+                    showDollhouse = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "view.3d")
+                            .font(.system(size: 14))
+                        Text("view_dollhouse />")
+                            .tracking(2)
+                    }
+                    .font(.custom("Courier", size: 14).weight(.bold))
+                    .foregroundStyle(RentleBrand.blue)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .overlay(
+                        Rectangle()
+                            .stroke(RentleBrand.blue, lineWidth: 1)
+                    )
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
+            // ── Upload to Backend (primary action after export) ──
+            if scanManager.exportedFileURL != nil && scanManager.selectedApartmentId != nil {
+                VStack(spacing: 8) {
+                    if scanManager.uploadStatus == .uploaded {
+                        HStack(spacing: 8) {
+                            Text("✓")
+                                .foregroundStyle(RentleBrand.green)
+                            Text("uploaded to server")
+                                .foregroundStyle(RentleBrand.green)
+                                .tracking(1)
+                        }
+                        .font(.custom("Courier", size: 14).weight(.bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(RentleBrand.green.opacity(0.1))
+                        .overlay(
+                            Rectangle()
+                                .stroke(RentleBrand.green.opacity(0.5), lineWidth: 1)
+                        )
+                    } else {
+                        Button {
+                            Task {
+                                let token = authManager.authToken ?? ""
+                                let baseURL = authManager.activeBaseURL
+                                await scanManager.uploadTour(token: token, baseURL: baseURL)
+                                if scanManager.uploadStatus == .uploaded {
+                                    onUploadComplete?()
+                                }
+                            }
+                        } label: {
+                            Group {
+                                if scanManager.isUploading {
+                                    HStack(spacing: 12) {
+                                        ProgressView()
+                                            .tint(RentleBrand.green)
+                                            .scaleEffect(0.8)
+                                        Text("uploading...")
+                                            .font(.custom("Courier", size: 14))
+                                            .foregroundStyle(RentleBrand.textSecondary)
+                                            .tracking(2)
+                                    }
+                                } else {
+                                    Text("upload_tour />")
+                                        .font(.custom("Courier", size: 14).weight(.bold))
+                                        .foregroundStyle(RentleBrand.background)
+                                        .tracking(2)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(scanManager.isUploading ? Color(hex: "1A1A1A") : Color(hex: "E8E6E3"))
+                            .overlay(
+                                Rectangle().stroke(
+                                    scanManager.isUploading ? RentleBrand.border : Color(hex: "E8E6E3"),
+                                    lineWidth: 1
+                                )
+                            )
+                        }
+                        .disabled(scanManager.isUploading)
+                    }
+
+                    // Upload error message
+                    if let uploadErr = scanManager.uploadError {
+                        HStack(spacing: 0) {
+                            Text("✗ ")
+                                .font(.custom("Courier", size: 14))
+                                .foregroundStyle(Color(hex: "CF6679"))
+                            Text(uploadErr)
+                                .font(.custom("Courier", size: 12))
+                                .foregroundStyle(Color(hex: "CF6679"))
+                                .tracking(0.5)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Color(hex: "CF6679").opacity(0.05))
+                        .overlay(Rectangle().stroke(Color(hex: "CF6679").opacity(0.4), lineWidth: 1))
+                    }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
+            // Share buttons row
+            if scanManager.exportedFileURL != nil {
+                HStack(spacing: 12) {
+                    Button {
+                        scanManager.presentShareSheet()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("↑")
+                            Text("share_file")
+                                .tracking(1)
+                        }
+                        .font(.custom("Courier", size: 12).weight(.bold))
+                        .foregroundStyle(RentleBrand.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .overlay(
+                            Rectangle()
+                                .stroke(RentleBrand.border, lineWidth: 1)
+                        )
+                    }
+
+                    if scanManager.exportedTourURL != nil {
+                        Button {
+                            if let url = scanManager.exportedTourURL {
+                                TourBundleExporter.share(url: url)
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text("↑")
+                                Text("share_tour")
+                                    .tracking(1)
+                            }
+                            .font(.custom("Courier", size: 12).weight(.bold))
+                            .foregroundStyle(RentleBrand.green)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .overlay(
+                                Rectangle()
+                                    .stroke(RentleBrand.green.opacity(0.5), lineWidth: 1)
+                            )
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+    }
+
+    // MARK: - Tour Nodes Summary (Collapsible)
+
+    @State private var showAllNodes = false
+
+    private var tourNodesSummary: some View {
+        VStack(spacing: 0) {
+            // Header row with toggle
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    showAllNodes.toggle()
+                }
+            } label: {
+                HStack {
+                    Text("> tour_nodes[\(scanManager.tourBundle.nodes.count)]")
+                        .font(.custom("Courier", size: 11))
+                        .foregroundStyle(RentleBrand.textSecondary)
+                        .tracking(1)
+                    Spacer()
+                    Text(showAllNodes ? "[collapse]" : "[expand]")
+                        .font(.custom("Courier", size: 10))
+                        .foregroundStyle(RentleBrand.textMuted)
+                        .tracking(0.5)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
+
+            // Show first 3 nodes always, rest on expand
+            let nodesToShow = showAllNodes
+                ? scanManager.tourBundle.nodes
+                : Array(scanManager.tourBundle.nodes.prefix(3))
+
+            ForEach(nodesToShow) { node in
+                HStack(spacing: 12) {
+                    Text("◉")
+                        .foregroundStyle(RentleBrand.green)
+                    Text(node.label.lowercased().replacingOccurrences(of: " ", with: "_"))
+                        .foregroundStyle(RentleBrand.textPrimary)
+                    Spacer()
+                    Text("(\(String(format: "%.1f", node.positionX)), \(String(format: "%.1f", node.positionY)), \(String(format: "%.1f", node.positionZ)))")
+                        .foregroundStyle(RentleBrand.textMuted)
+                }
+                .font(.custom("Courier", size: 12))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(RentleBrand.surface)
+            }
+
+            // "and N more" indicator
+            if !showAllNodes && scanManager.tourBundle.nodes.count > 3 {
+                Text("// + \(scanManager.tourBundle.nodes.count - 3) more nodes")
+                    .font(.custom("Courier", size: 10))
+                    .foregroundStyle(RentleBrand.textMuted)
+                    .tracking(0.5)
+                    .padding(.vertical, 6)
+            }
+        }
+        .background(RentleBrand.surface)
+        .overlay(
+            Rectangle()
+                .stroke(RentleBrand.border, lineWidth: 1)
+        )
     }
 }
 
