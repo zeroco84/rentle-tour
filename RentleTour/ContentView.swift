@@ -638,14 +638,25 @@ struct ReviewScreen: View {
             if scanManager.exportedFileURL != nil && scanManager.selectedApartmentId != nil {
                 VStack(spacing: 8) {
                     if scanManager.uploadStatus == .uploaded {
-                        HStack(spacing: 8) {
-                            Text("✓")
-                                .foregroundStyle(RentleBrand.green)
-                            Text("uploaded to server")
-                                .foregroundStyle(RentleBrand.green)
-                                .tracking(1)
+                        VStack(spacing: 6) {
+                            HStack(spacing: 8) {
+                                Text("✓")
+                                    .foregroundStyle(RentleBrand.green)
+                                Text("uploaded_to_server")
+                                    .foregroundStyle(RentleBrand.green)
+                                    .tracking(1)
+                            }
+                            .font(.custom("Courier", size: 14).weight(.bold))
+
+                            if let label = scanManager.selectedApartmentLabel {
+                                Text("→ \(label)")
+                                    .font(.custom("Courier", size: 11))
+                                    .foregroundStyle(RentleBrand.textSecondary)
+                                    .tracking(0.5)
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.center)
+                            }
                         }
-                        .font(.custom("Courier", size: 14).weight(.bold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(RentleBrand.green.opacity(0.1))
