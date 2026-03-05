@@ -540,13 +540,7 @@ struct ReviewScreen: View {
                             .padding(.top, 12)
                     }
 
-                    // ── Action buttons (repeated at bottom for long scrolls) ──
-                    actionButtons
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 30)
-                        .animation(.easeOut(duration: 0.3), value: scanManager.exportedFileURL != nil)
-                        .animation(.easeOut(duration: 0.3), value: scanManager.exportedTourURL != nil)
-                        .animation(.easeOut(duration: 0.3), value: scanManager.uploadStatus)
+                    Spacer().frame(height: 30)
                 }
             }
             .navigationTitle("")
