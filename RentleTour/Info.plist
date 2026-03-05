@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>RentleTour needs camera access to scan rooms using LiDAR.</string>
+	<key>ENVIRONMENT</key>
+	<string>$(ENVIRONMENT)</string>
+</dict>
+</plist>
