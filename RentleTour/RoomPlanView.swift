@@ -13,6 +13,7 @@ import RoomPlan
 
 struct RoomPlanScanView: UIViewRepresentable {
     @EnvironmentObject var scanManager: ScanManager
+    var roomName: String = "Room"
 
     /// Closure fired when the scan finishes and a CapturedRoom is ready.
     var onScanFinished: () -> Void
@@ -22,7 +23,7 @@ struct RoomPlanScanView: UIViewRepresentable {
 
         coordinator.onCaptureComplete = { room in
             Task { @MainActor in
-                scanManager.addRoom(room)
+                scanManager.addRoom(room, name: roomName)
                 onScanFinished()
             }
         }
@@ -64,6 +65,7 @@ struct ScanningScreen: View {
     @State private var showObjectCapture = false
     @State private var captureView: RoomCaptureView?
     @State private var showInstructions = true
+    @State private var selectedRoomType: RoomType = .livingRoom
 
     var body: some View {
         ZStack {
@@ -71,6 +73,7 @@ struct ScanningScreen: View {
             RoomPlanScanViewWithRef(
                 scanManager: scanManager,
                 captureViewRef: $captureView,
+                roomName: selectedRoomType.rawValue,
                 onScanFinished: {
                     scanComplete = true
                 }
@@ -105,11 +108,26 @@ struct ScanningScreen: View {
 
                     Spacer()
 
-                    // Room counter badge
-                    Text("room_\(scanManager.capturedRooms.count + 1)")
-                        .font(.custom("Courier", size: 12))
+                    // Room type selector (dropdown)
+                    Menu {
+                        ForEach(RoomType.allCases) { roomType in
+                            Button {
+                                selectedRoomType = roomType
+                            } label: {
+                                Label(roomType.rawValue, systemImage: roomType.icon)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: selectedRoomType.icon)
+                                .font(.system(size: 11))
+                            Text(selectedRoomType.terminalLabel)
+                                .font(.custom("Courier", size: 12))
+                                .tracking(1)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8, weight: .bold))
+                        }
                         .foregroundStyle(RentleBrand.textPrimary)
-                        .tracking(1)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
                         .background(RentleBrand.background.opacity(0.85))
@@ -117,6 +135,7 @@ struct ScanningScreen: View {
                             Rectangle()
                                 .stroke(RentleBrand.border, lineWidth: 1)
                         )
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -366,6 +385,7 @@ struct ScanningScreen: View {
 struct RoomPlanScanViewWithRef: UIViewRepresentable {
     var scanManager: ScanManager
     @Binding var captureViewRef: RoomCaptureView?
+    var roomName: String = "Room"
     var onScanFinished: () -> Void
 
     func makeCoordinator() -> RoomCaptureCoordinator {
@@ -373,7 +393,7 @@ struct RoomPlanScanViewWithRef: UIViewRepresentable {
 
         coordinator.onCaptureComplete = { room in
             Task { @MainActor in
-                scanManager.addRoom(room)
+                scanManager.addRoom(room, name: roomName)
                 onScanFinished()
             }
         }

@@ -513,7 +513,8 @@ struct ReviewScreen: View {
                                 HStack(spacing: 12) {
                                     Text("✓")
                                         .foregroundStyle(RentleBrand.green)
-                                    Text("room_\(index + 1)")
+                                    let name = scanManager.roomNames[index] ?? "Room \(index + 1)"
+                                    Text(name.lowercased().replacingOccurrences(of: " ", with: "_"))
                                         .foregroundStyle(RentleBrand.textPrimary)
                                     Spacer()
                                     Text("captured")

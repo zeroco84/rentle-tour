@@ -26,6 +26,35 @@ enum DeviceCapability {
     }
 }
 
+// MARK: - Room Type
+
+/// Room type options for naming scanned rooms
+enum RoomType: String, CaseIterable, Identifiable {
+    case livingRoom = "Living Room"
+    case kitchen = "Kitchen"
+    case bathroom = "Bathroom"
+    case bedroom = "Bedroom"
+    case hallway = "Hallway"
+    case other = "Other"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .livingRoom: return "sofa"
+        case .kitchen: return "fork.knife"
+        case .bathroom: return "shower"
+        case .bedroom: return "bed.double"
+        case .hallway: return "door.left.hand.open"
+        case .other: return "square.dashed"
+        }
+    }
+
+    var terminalLabel: String {
+        rawValue.lowercased().replacingOccurrences(of: " ", with: "_")
+    }
+}
+
 // MARK: - Upload Status
 
 enum UploadStatus: Equatable {
@@ -46,6 +75,9 @@ final class ScanManager: ObservableObject {
 
     /// All rooms captured so far in the current property scan.
     @Published var capturedRooms: [CapturedRoom] = []
+
+    /// Room names keyed by index (parallel to capturedRooms)
+    var roomNames: [Int: String] = [:]
 
     /// Set after a successful merge.
     @Published var mergedStructure: CapturedStructure?
@@ -83,12 +115,15 @@ final class ScanManager: ObservableObject {
 
     // MARK: Room management
 
-    func addRoom(_ room: CapturedRoom) {
+    func addRoom(_ room: CapturedRoom, name: String = "Room") {
+        let index = capturedRooms.count
         capturedRooms.append(room)
+        roomNames[index] = name
     }
 
     func clearAll() {
         capturedRooms.removeAll()
+        roomNames.removeAll()
         mergedStructure = nil
         exportedFileURL = nil
         exportedTourURL = nil

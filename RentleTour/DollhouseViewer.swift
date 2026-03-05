@@ -227,6 +227,9 @@ struct DollhouseRealityView: UIViewRepresentable {
         arView.cameraMode = .nonAR
         arView.renderOptions = [.disableMotionBlur]
 
+        // Enable built-in orbit camera controls (pan, zoom, rotate)
+        arView.debugOptions = []
+
         context.coordinator.arView = arView
 
         // Load the USDZ model
@@ -235,12 +238,16 @@ struct DollhouseRealityView: UIViewRepresentable {
         // Place node spheres
         placeNodeSpheres(in: arView, context: context)
 
-        // Add tap gesture
+        // Add tap gesture (coexists with camera gestures)
         let tapGesture = UITapGestureRecognizer(
             target: context.coordinator,
             action: #selector(DollhouseCoordinator.handleTap(_:))
         )
+        tapGesture.cancelsTouchesInView = false
         arView.addGestureRecognizer(tapGesture)
+
+        // Add orbit camera gestures
+        context.coordinator.installCameraGestures(on: arView)
 
         // Set initial camera
         setupCamera(arView)
@@ -493,6 +500,107 @@ class DollhouseCoordinator {
         if let observer = coverageObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+    }
+
+    // MARK: - Camera Gesture Controls
+
+    private var cameraAnchor: AnchorEntity?
+    private var cameraEntity: PerspectiveCamera?
+
+    /// Orbit parameters
+    private var orbitAngle: Float = 0.8       // horizontal angle (radians)
+    private var orbitPitch: Float = 0.6       // vertical angle (radians)
+    private var orbitDistance: Float = 5.0     // distance from target
+    private var orbitTarget: SIMD3<Float> = .zero
+
+    func installCameraGestures(on arView: ARView) {
+        // Pan gesture (2 fingers for orbit rotation)
+        let panGesture = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        panGesture.minimumNumberOfTouches = 1
+        panGesture.maximumNumberOfTouches = 1
+        arView.addGestureRecognizer(panGesture)
+
+        // Pinch gesture for zoom
+        let pinchGesture = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+        arView.addGestureRecognizer(pinchGesture)
+
+        // Two-finger pan for translation
+        let twoPan = UIPanGestureRecognizer(target: self, action: #selector(handleTwoFingerPan(_:)))
+        twoPan.minimumNumberOfTouches = 2
+        twoPan.maximumNumberOfTouches = 2
+        arView.addGestureRecognizer(twoPan)
+
+        // Store camera reference
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.findCamera(in: arView)
+        }
+    }
+
+    private func findCamera(in arView: ARView) {
+        for anchor in arView.scene.anchors {
+            for child in anchor.children {
+                if let camera = child as? PerspectiveCamera {
+                    self.cameraEntity = camera
+                    self.cameraAnchor = anchor as? AnchorEntity
+
+                    // Extract initial orbit parameters from camera position
+                    let pos = camera.position(relativeTo: nil)
+                    self.orbitDistance = length(pos - orbitTarget)
+                    self.orbitAngle = atan2(pos.x - orbitTarget.x, pos.z - orbitTarget.z)
+                    self.orbitPitch = asin((pos.y - orbitTarget.y) / max(orbitDistance, 0.1))
+                    return
+                }
+            }
+        }
+    }
+
+    private func updateCameraPosition() {
+        guard let camera = cameraEntity else { return }
+
+        // Clamp pitch to avoid flipping
+        orbitPitch = max(0.1, min(Float.pi / 2 - 0.05, orbitPitch))
+        orbitDistance = max(1.0, min(15.0, orbitDistance))
+
+        let x = orbitTarget.x + orbitDistance * cos(orbitPitch) * sin(orbitAngle)
+        let y = orbitTarget.y + orbitDistance * sin(orbitPitch)
+        let z = orbitTarget.z + orbitDistance * cos(orbitPitch) * cos(orbitAngle)
+
+        let newPos = SIMD3<Float>(x, y, z)
+        camera.look(at: orbitTarget, from: newPos, relativeTo: nil)
+    }
+
+    @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+        let translation = gesture.translation(in: gesture.view)
+        let sensitivity: Float = 0.005
+
+        orbitAngle -= Float(translation.x) * sensitivity
+        orbitPitch += Float(translation.y) * sensitivity
+
+        updateCameraPosition()
+        gesture.setTranslation(.zero, in: gesture.view)
+    }
+
+    @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+        if gesture.state == .changed {
+            orbitDistance /= Float(gesture.scale)
+            gesture.scale = 1.0
+            updateCameraPosition()
+        }
+    }
+
+    @objc private func handleTwoFingerPan(_ gesture: UIPanGestureRecognizer) {
+        let translation = gesture.translation(in: gesture.view)
+        let sensitivity: Float = 0.003
+
+        // Move the orbit target (panning)
+        let right = SIMD3<Float>(cos(orbitAngle), 0, -sin(orbitAngle))
+        let up = SIMD3<Float>(0, 1, 0)
+
+        orbitTarget -= right * Float(translation.x) * sensitivity
+        orbitTarget += up * Float(translation.y) * sensitivity
+
+        updateCameraPosition()
+        gesture.setTranslation(.zero, in: gesture.view)
     }
 
     @objc func handleTap(_ gesture: UITapGestureRecognizer) {

@@ -1,12 +1,11 @@
 // PanoramaViewer.swift
 // RentleTour
 //
-// Full-screen equirectangular 360° image viewer.
+// Full-screen image viewer for captured 360° node photos.
 // Displayed when a user taps a node in the Dollhouse view.
-// Supports pan and zoom gestures for immersive exploration.
+// Supports pinch-to-zoom and drag-to-pan for exploration.
 
 import SwiftUI
-import SceneKit
 
 // MARK: - Panorama Viewer Screen
 
@@ -18,6 +17,12 @@ struct PanoramaViewerScreen: View {
 
     @State private var image: UIImage?
     @State private var isLoading = true
+
+    // Zoom/pan state
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
 
     var body: some View {
         ZStack {
@@ -33,9 +38,59 @@ struct PanoramaViewerScreen: View {
                         .tracking(1)
                 }
             } else if let image = image {
-                // SceneKit panorama sphere
-                PanoramaSphereView(image: image)
-                    .ignoresSafeArea()
+                // Zoomable/pannable image viewer
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .scaleEffect(scale)
+                    .offset(offset)
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { value in
+                                scale = lastScale * value
+                            }
+                            .onEnded { value in
+                                lastScale = scale
+                                if scale < 1.0 {
+                                    withAnimation(.spring(response: 0.3)) {
+                                        scale = 1.0
+                                        lastScale = 1.0
+                                        offset = .zero
+                                        lastOffset = .zero
+                                    }
+                                }
+                            }
+                    )
+                    .simultaneousGesture(
+                        DragGesture()
+                            .onChanged { value in
+                                if scale > 1.0 {
+                                    offset = CGSize(
+                                        width: lastOffset.width + value.translation.width,
+                                        height: lastOffset.height + value.translation.height
+                                    )
+                                }
+                            }
+                            .onEnded { _ in
+                                lastOffset = offset
+                            }
+                    )
+                    .simultaneousGesture(
+                        TapGesture(count: 2)
+                            .onEnded {
+                                withAnimation(.spring(response: 0.3)) {
+                                    if scale > 1.0 {
+                                        scale = 1.0
+                                        lastScale = 1.0
+                                        offset = .zero
+                                        lastOffset = .zero
+                                    } else {
+                                        scale = 3.0
+                                        lastScale = 3.0
+                                    }
+                                }
+                            }
+                    )
             } else {
                 VStack(spacing: 16) {
                     Text("✗ image_not_found")
@@ -87,7 +142,7 @@ struct PanoramaViewerScreen: View {
 
                     Spacer()
 
-                    Text("drag to look around")
+                    Text("pinch to zoom · double-tap to reset")
                         .font(.custom("Courier", size: 10))
                         .foregroundStyle(RentleBrand.textMuted)
                         .tracking(1)
@@ -104,65 +159,4 @@ struct PanoramaViewerScreen: View {
             isLoading = false
         }
     }
-}
-
-// MARK: - Panorama Sphere (SceneKit)
-
-/// Renders an image on the inside of a sphere for 360° viewing.
-/// The camera sits at the center; the user rotates by dragging.
-struct PanoramaSphereView: UIViewRepresentable {
-    let image: UIImage
-
-    func makeUIView(context: Context) -> SCNView {
-        let scnView = SCNView(frame: .zero)
-        scnView.backgroundColor = .black
-        scnView.allowsCameraControl = true
-        scnView.defaultCameraController.interactionMode = .orbitTurntable
-        scnView.defaultCameraController.inertiaEnabled = true
-        scnView.antialiasingMode = .multisampling4X
-
-        let scene = SCNScene()
-
-        // Create the panorama sphere
-        let sphere = SCNSphere(radius: 20)
-        sphere.segmentCount = 96
-
-        // Map the image to the inside of the sphere
-        let material = SCNMaterial()
-        material.diffuse.contents = image
-        material.isDoubleSided = true
-        material.cullMode = .front  // Render inside face only
-
-        sphere.materials = [material]
-        let sphereNode = SCNNode(geometry: sphere)
-
-        // Flip the sphere so texture maps correctly on the inside
-        sphereNode.scale = SCNVector3(-1, 1, 1)
-
-        scene.rootNode.addChildNode(sphereNode)
-
-        // Camera at the center of the sphere
-        let cameraNode = SCNNode()
-        cameraNode.camera = SCNCamera()
-        cameraNode.camera?.fieldOfView = 75
-        cameraNode.camera?.zNear = 0.1
-        cameraNode.camera?.zFar = 50
-        cameraNode.position = SCNVector3(0, 0, 0)
-        scene.rootNode.addChildNode(cameraNode)
-
-        scnView.scene = scene
-        scnView.pointOfView = cameraNode
-
-        // Ambient light
-        let light = SCNLight()
-        light.type = .ambient
-        light.intensity = 1000
-        let lightNode = SCNNode()
-        lightNode.light = light
-        scene.rootNode.addChildNode(lightNode)
-
-        return scnView
-    }
-
-    func updateUIView(_ uiView: SCNView, context: Context) {}
 }
