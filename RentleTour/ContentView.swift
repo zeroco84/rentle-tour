@@ -56,6 +56,7 @@ struct ContentView: View {
     @State private var showReview = false
     @State private var showUnsupportedAlert = false
     @State private var showApartmentPicker = false
+    @State private var showPropertyActions = false
     @State private var activePropertyIndex: Int?
 
     var body: some View {
@@ -166,6 +167,39 @@ struct ContentView: View {
             } message: {
                 Text("This app requires a LiDAR-equipped device (iPhone 12 Pro or later, or iPad Pro). Your device does not support room scanning.")
             }
+            .confirmationDialog(
+                "Property Options",
+                isPresented: $showPropertyActions,
+                titleVisibility: .visible
+            ) {
+                Button("View Results") {
+                    showReview = true
+                }
+
+                Button("Add More Rooms") {
+                    // Continue scanning without clearing existing data
+                    guard DeviceCapability.supportsLiDAR else {
+                        showUnsupportedAlert = true
+                        return
+                    }
+                    showScanner = true
+                }
+
+                Button("Re-scan", role: .destructive) {
+                    scanManager.clearAll()
+                    if let idx = activePropertyIndex {
+                        properties[idx].roomCount = 0
+                        properties[idx].uploadStatus = .pending
+                    }
+                    guard DeviceCapability.supportsLiDAR else {
+                        showUnsupportedAlert = true
+                        return
+                    }
+                    showScanner = true
+                }
+
+                Button("Cancel", role: .cancel) {}
+            }
         }
         .preferredColorScheme(.dark)
     }
@@ -265,14 +299,21 @@ struct ContentView: View {
                     ForEach(Array(properties.enumerated()), id: \.element.id) { index, property in
                         PropertyCard(property: property) {
                             activePropertyIndex = index
-                            scanManager.clearAll()
                             scanManager.selectedApartmentId = property.apartmentId
                             scanManager.selectedApartmentLabel = property.name
-                            guard DeviceCapability.supportsLiDAR else {
-                                showUnsupportedAlert = true
-                                return
+
+                            if property.roomCount > 0 || property.uploadStatus == .uploaded {
+                                // Property has data — show options
+                                showPropertyActions = true
+                            } else {
+                                // Fresh property — start scanning
+                                scanManager.clearAll()
+                                guard DeviceCapability.supportsLiDAR else {
+                                    showUnsupportedAlert = true
+                                    return
+                                }
+                                showScanner = true
                             }
-                            showScanner = true
                         }
                     }
                 }
