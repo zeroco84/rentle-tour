@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D Tour Viewer</title>
+    <script type="module" src="https://unpkg.com/@google/model-viewer@3.4.0/dist/model-viewer.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro", system-ui, sans-serif;
+            background: #000;
+            color: #fff;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        model-viewer {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            --poster-color: transparent;
+        }
+
+        /* Hotspot buttons on the 3D model */
+        .hotspot {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.9);
+            background: rgba(10, 132, 255, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 12px rgba(10, 132, 255, 0.4);
+            font-size: 0;
+        }
+
+        .hotspot::before {
+            content: '';
+            display: block;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: white;
+        }
+
+        .hotspot:hover, .hotspot:active {
+            transform: scale(1.2);
+            background: rgba(10, 132, 255, 1);
+            box-shadow: 0 4px 20px rgba(10, 132, 255, 0.6);
+        }
+
+        .hotspot .label {
+            position: absolute;
+            bottom: -28px;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
+        }
+
+        /* Pulse animation for hotspots */
+        .hotspot::after {
+            content: '';
+            position: absolute;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: 2px solid rgba(10, 132, 255, 0.5);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(2); opacity: 0; }
+        }
+
+        /* Loading overlay */
+        #loading {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+
+        #loading.hidden { opacity: 0; pointer-events: none; }
+
+        .loader {
+            width: 48px; height: 48px;
+            border: 3px solid rgba(255,255,255,0.2);
+            border-top: 3px solid #0A84FF;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #loading p {
+            margin-top: 16px;
+            font-size: 15px;
+            color: rgba(255,255,255,0.7);
+        }
+
+        /* Mode toggle (Dollhouse / Panorama) */
+        #mode-toggle {
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.15);
+            z-index: 50;
+        }
+
+        .mode-btn {
+            padding: 8px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.6);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .mode-btn.active {
+            color: white;
+            background: rgba(10, 132, 255, 0.8);
+        }
+
+        /* Panorama viewer overlay */
+        #panorama-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #000;
+            z-index: 200;
+            display: none;
+            touch-action: none;
+        }
+
+        #panorama-overlay.visible { display: block; }
+
+        #panorama-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        #back-btn {
+            position: absolute;
+            top: 60px;
+            left: 16px;
+            padding: 10px 18px;
+            font-size: 15px;
+            font-weight: 600;
+            color: white;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 10px;
+            cursor: pointer;
+            z-index: 210;
+        }
+
+        #panorama-label {
+            position: absolute;
+            top: 60px;
+            right: 16px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(8px);
+            border-radius: 8px;
+            z-index: 210;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading overlay -->
+    <div id="loading">
+        <div class="loader"></div>
+        <p>Loading 3D Tour…</p>
+    </div>
+
+    <!-- 3D Model Viewer -->
+    <model-viewer
+        id="viewer"
+        camera-controls
+        touch-action="pan-y"
+        shadow-intensity="0.8"
+        shadow-softness="0.5"
+        exposure="1.2"
+        environment-image="neutral"
+        interpolation-decay="100"
+        min-camera-orbit="auto auto 1m"
+        max-camera-orbit="auto auto 50m"
+    >
+    </model-viewer>
+
+    <!-- Mode toggle -->
+    <div id="mode-toggle" style="display:none;">
+        <button class="mode-btn active" id="btn-dollhouse" onclick="switchMode('dollhouse')">Dollhouse</button>
+        <button class="mode-btn" id="btn-panorama" onclick="switchMode('panorama')">Panorama</button>
+    </div>
+
+    <!-- Panorama overlay -->
+    <div id="panorama-overlay">
+        <canvas id="panorama-canvas"></canvas>
+        <button id="back-btn" onclick="exitPanorama()">← Back</button>
+        <div id="panorama-label"></div>
+    </div>
+
+    <script>
+        // ── State ──
+        let tourData = null;
+        let currentMode = 'dollhouse';
+        let panoramaRenderer = null;
+
+        // ── Model Viewer Reference ──
+        const viewer = document.getElementById('viewer');
+        const loading = document.getElementById('loading');
+
+        // ── Init: Receive tour data from Swift via postMessage ──
+        window.addEventListener('message', (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'loadTour') {
+                    initTour(data.payload);
+                }
+            } catch (e) {
+                console.error('Failed to parse message:', e);
+            }
+        });
+
+        // Also support WKWebView message handler
+        window.initTourFromSwift = function(jsonString) {
+            try {
+                const data = JSON.parse(jsonString);
+                initTour(data);
+            } catch (e) {
+                console.error('Failed to parse tour data:', e);
+            }
+        };
+
+        function initTour(data) {
+            tourData = data;
+
+            // Set GLB model source
+            if (data.modelUrl) {
+                viewer.src = data.modelUrl;
+            }
+
+            // When model loads
+            viewer.addEventListener('load', () => {
+                loading.classList.add('hidden');
+                document.getElementById('mode-toggle').style.display = 'flex';
+
+                // Add hotspots from navigation graph
+                if (data.navGraph && data.navGraph.nodes) {
+                    addHotspots(data.navGraph.nodes);
+                }
+            });
+
+            // Progress indicator
+            viewer.addEventListener('progress', (e) => {
+                const pct = Math.round(e.detail.totalProgress * 100);
+                loading.querySelector('p').textContent = `Loading 3D Tour… ${pct}%`;
+            });
+        }
+
+        // ── Hotspots ──
+        function addHotspots(nodes) {
+            nodes.forEach((node, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'hotspot';
+                btn.slot = `hotspot-${index}`;
+                btn.dataset.position = `${node.position[0]}m ${node.position[1]}m ${node.position[2]}m`;
+                btn.dataset.normal = '0m 1m 0m';
+                btn.dataset.nodeId = node.id;
+                btn.dataset.panoramaUrl = node.panorama_url || '';
+                btn.dataset.label = node.label || `Room ${index + 1}`;
+
+                // Add label
+                const label = document.createElement('span');
+                label.className = 'label';
+                label.textContent = node.label || `Room ${index + 1}`;
+                btn.appendChild(label);
+
+                // Click handler: camera fly-to + show panorama option
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    onHotspotTap(node, index);
+                });
+
+                viewer.appendChild(btn);
+            });
+        }
+
+        function onHotspotTap(node, index) {
+            // Smoothly fly camera to this hotspot position
+            const pos = node.position;
+            const orbit = `0deg 65deg ${3}m`;
+            const target = `${pos[0]}m ${pos[1]}m ${pos[2]}m`;
+
+            viewer.cameraTarget = target;
+            viewer.cameraOrbit = orbit;
+            viewer.interpolationDecay = 100;
+
+            // Notify Swift
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tourBridge) {
+                window.webkit.messageHandlers.tourBridge.postMessage(JSON.stringify({
+                    action: 'hotspotTapped',
+                    nodeId: node.id,
+                    label: node.label,
+                    panoramaUrl: node.panorama_url
+                }));
+            }
+
+            // If panorama URL available and in panorama mode, show it
+            if (node.panorama_url && currentMode === 'panorama') {
+                setTimeout(() => showPanorama(node), 800);
+            }
+        }
+
+        // ── Mode Switching ──
+        function switchMode(mode) {
+            currentMode = mode;
+            document.getElementById('btn-dollhouse').classList.toggle('active', mode === 'dollhouse');
+            document.getElementById('btn-panorama').classList.toggle('active', mode === 'panorama');
+
+            if (mode === 'dollhouse') {
+                // Reset to overhead view
+                viewer.cameraOrbit = '0deg 45deg auto';
+                viewer.cameraTarget = 'auto auto auto';
+            } else {
+                // First-person-like: closer, lower angle
+                viewer.cameraOrbit = '0deg 75deg 5m';
+            }
+        }
+
+        // ── Panorama Viewer (simple equirectangular) ──
+        function showPanorama(node) {
+            const overlay = document.getElementById('panorama-overlay');
+            const canvas = document.getElementById('panorama-canvas');
+            const label = document.getElementById('panorama-label');
+            const ctx = canvas.getContext('2d');
+
+            label.textContent = node.label || 'Room View';
+            overlay.classList.add('visible');
+
+            // Load panorama image
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+
+                // Simple pan viewer state
+                let panX = 0;
+                let startX = 0;
+                let isDragging = false;
+
+                function draw() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    // Draw panorama with horizontal panning
+                    const srcX = ((panX % img.width) + img.width) % img.width;
+                    const srcW = Math.min(img.width - srcX, img.width);
+                    const scale = canvas.height / img.height;
+                    const drawW = srcW * scale;
+
+                    ctx.drawImage(img, srcX, 0, srcW, img.height, 0, 0, drawW, canvas.height);
+                    // Wrap around
+                    if (drawW < canvas.width) {
+                        const remainW = canvas.width - drawW;
+                        const srcRemain = remainW / scale;
+                        ctx.drawImage(img, 0, 0, srcRemain, img.height, drawW, 0, remainW, canvas.height);
+                    }
+                }
+
+                canvas.addEventListener('touchstart', (e) => {
+                    isDragging = true;
+                    startX = e.touches[0].clientX;
+                });
+
+                canvas.addEventListener('touchmove', (e) => {
+                    if (!isDragging) return;
+                    e.preventDefault();
+                    const dx = e.touches[0].clientX - startX;
+                    panX -= dx * (img.width / canvas.width) * 0.5;
+                    startX = e.touches[0].clientX;
+                    requestAnimationFrame(draw);
+                }, { passive: false });
+
+                canvas.addEventListener('touchend', () => { isDragging = false; });
+
+                // Mouse support
+                canvas.addEventListener('mousedown', (e) => { isDragging = true; startX = e.clientX; });
+                canvas.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    panX -= (e.clientX - startX) * (img.width / canvas.width) * 0.5;
+                    startX = e.clientX;
+                    requestAnimationFrame(draw);
+                });
+                canvas.addEventListener('mouseup', () => { isDragging = false; });
+
+                draw();
+            };
+            img.src = node.panorama_url;
+        }
+
+        function exitPanorama() {
+            document.getElementById('panorama-overlay').classList.remove('visible');
+        }
+    </script>
+</body>
+</html>

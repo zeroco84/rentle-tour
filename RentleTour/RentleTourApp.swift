@@ -5,11 +5,41 @@
 // Splash screen matches Rentle-Assist boot sequence exactly.
 
 import SwiftUI
+import UserNotifications
+
+// MARK: - App Delegate (Background Upload Session Handling)
+
+class AppDelegate: NSObject, UIApplicationDelegate {
+
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        BackgroundUploadManager.shared.setCompletionHandler(completionHandler, for: identifier)
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        // Request notification permissions for upload completion
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            if granted {
+                print("[RentleTour] ✓ Notification permission granted")
+            }
+        }
+        return true
+    }
+}
 
 @main
 struct RentleTourApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     @StateObject private var scanManager = ScanManager()
     @StateObject private var authManager = AuthManager()
+    @StateObject private var networkMonitor = NetworkMonitor()
 
     @State private var isCheckingAuth = true
 
@@ -24,6 +54,7 @@ struct RentleTourApp: App {
                     ContentView()
                         .environmentObject(scanManager)
                         .environmentObject(authManager)
+                        .environmentObject(networkMonitor)
                 } else {
                     LoginScreen()
                         .environmentObject(authManager)

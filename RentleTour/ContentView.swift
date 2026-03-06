@@ -50,6 +50,7 @@ enum RentleBrand {
 struct ContentView: View {
     @EnvironmentObject var scanManager: ScanManager
     @EnvironmentObject var authManager: AuthManager
+    @EnvironmentObject var networkMonitor: NetworkMonitor
 
     @State private var properties: [Property] = []
     @State private var showScanner = false
@@ -58,6 +59,12 @@ struct ContentView: View {
     @State private var showApartmentPicker = false
     @State private var showPropertyActions = false
     @State private var activePropertyIndex: Int?
+    @State private var showSyncCenter = false
+    @State private var showTourViewer = false
+    @State private var activeTourData: ApartmentTourData? = nil
+    @State private var showBrowseTours = false
+    @State private var availableTours: [ApartmentTourData] = []
+    @State private var tourAlertMessage: String? = nil
 
     var body: some View {
         NavigationStack {
@@ -77,10 +84,18 @@ struct ContentView: View {
                     .font(.subheadline)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        startNewProperty()
-                    } label: {
-                        Image(systemName: "plus")
+                    HStack(spacing: 12) {
+                        Button {
+                            showSyncCenter = true
+                        } label: {
+                            Image(systemName: "icloud.and.arrow.up")
+                        }
+
+                        Button {
+                            startNewProperty()
+                        } label: {
+                            Image(systemName: "plus")
+                        }
                     }
                 }
             }
@@ -118,10 +133,38 @@ struct ContentView: View {
                 .environmentObject(scanManager)
                 .environmentObject(authManager)
             }
+            .sheet(isPresented: $showSyncCenter) {
+                SyncCenterView(networkMonitor: networkMonitor)
+            }
+            .sheet(isPresented: $showTourViewer) {
+                if let tourData = activeTourData {
+                    ProcessedTourViewer(tourData: tourData)
+                }
+            }
+            .sheet(isPresented: $showBrowseTours) {
+                TourBrowserSheet(
+                    tours: availableTours,
+                    onSelect: { tourData in
+                        activeTourData = tourData
+                        showBrowseTours = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            showTourViewer = true
+                        }
+                    }
+                )
+            }
             .alert("LiDAR Not Available", isPresented: $showUnsupportedAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text("This app requires a LiDAR-equipped device (iPhone 12 Pro or later, or iPad Pro).")
+            }
+            .alert("Tour", isPresented: Binding(
+                get: { tourAlertMessage != nil },
+                set: { if !$0 { tourAlertMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { tourAlertMessage = nil }
+            } message: {
+                Text(tourAlertMessage ?? "")
             }
             .confirmationDialog(
                 "Property Options",
@@ -130,6 +173,11 @@ struct ContentView: View {
             ) {
                 Button("View Results") {
                     showReview = true
+                }
+                Button("View Existing Tour") {
+                    if let idx = activePropertyIndex {
+                        fetchAndViewTour(apartmentId: properties[idx].apartmentId)
+                    }
                 }
                 Button("Add More Rooms") {
                     guard DeviceCapability.supportsLiDAR else {
@@ -230,6 +278,112 @@ struct ContentView: View {
         scanManager.selectedApartmentId = apartment.id
         scanManager.selectedApartmentLabel = apartment.label
         showScanner = true
+    }
+
+    /// Fetches tour data for an apartment and opens the viewer if available.
+    private func fetchAndViewTour(apartmentId: Int) {
+        Task {
+            let token = authManager.authToken ?? ""
+            let baseURL = authManager.activeBaseURL
+
+            do {
+                let tourData = try await TourService.fetchTourData(
+                    apartmentId: apartmentId,
+                    token: token,
+                    baseURL: baseURL
+                )
+
+                if tourData.hasTour {
+                    activeTourData = tourData
+                    showTourViewer = true
+                } else if tourData.isProcessing {
+                    tourAlertMessage = "Tour is still being processed. Please check back shortly."
+                } else {
+                    tourAlertMessage = "No completed tour available for this apartment yet."
+                }
+            } catch {
+                tourAlertMessage = "Failed to load tour: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Fetches all apartments with completed tours for the Browse Tours feature.
+    private func fetchAvailableTours() {
+        Task {
+            let token = authManager.authToken ?? ""
+            let baseURL = authManager.activeBaseURL
+
+            do {
+                availableTours = try await TourService.fetchApartmentsWithTours(
+                    token: token,
+                    baseURL: baseURL
+                )
+                showBrowseTours = true
+            } catch {
+                tourAlertMessage = "Failed to load tours: \(error.localizedDescription)"
+            }
+        }
+    }
+}
+
+// MARK: - Tour Browser Sheet
+
+struct TourBrowserSheet: View {
+    let tours: [ApartmentTourData]
+    var onSelect: (ApartmentTourData) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if tours.isEmpty {
+                    ContentUnavailableView {
+                        Label("No Tours", systemImage: "view.3d")
+                    } description: {
+                        Text("No completed tours are available yet. Upload a scan to get started.")
+                    }
+                } else {
+                    List(tours, id: \.id) { tour in
+                        Button {
+                            onSelect(tour)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "view.3d")
+                                    .font(.title2)
+                                    .foregroundStyle(.tint)
+                                    .frame(width: 40, height: 40)
+                                    .background(.tint.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(tour.name)
+                                        .font(.body.weight(.medium))
+                                        .foregroundStyle(.primary)
+                                    if let building = tour.building {
+                                        Text(building)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                }
+            }
+            .navigationTitle("Browse Tours")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") { dismiss() }
+                }
+            }
+        }
     }
 }
 
@@ -349,8 +503,10 @@ struct ReviewScreen: View {
 
                     let roomCount = scanManager.capturedRooms.count
                     let nodeCount = scanManager.tourBundle.nodes.count
+                    let textureCount = scanManager.tourBundle.textureFrames.count
                     LabeledContent("Rooms", value: "\(roomCount)")
                     LabeledContent("360° Nodes", value: "\(nodeCount)")
+                    LabeledContent("Textures", value: "\(textureCount)")
                 } header: {
                     Text("Scan Summary")
                 }

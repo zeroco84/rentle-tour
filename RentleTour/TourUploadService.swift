@@ -1,30 +1,27 @@
 // TourUploadService.swift
 // RentleTour
 //
-// Multipart upload service for .usdz tour files.
+// Upload service for .rentletour ZIP bundles.
+// Aligned with backend Fargate processing pipeline:
+//   - Sends full TourBundle ZIP (not raw .usdz)
+//   - Content-Type: application/zip via multipart/form-data
+//   - Expects 202 Accepted (async processing via SQS → Fargate)
+//
 // Endpoint: POST /api/v1/admin/apartments/:apartment_id/virtual_tour
-// Content-Type: multipart/form-data
 
 import Foundation
 
-// MARK: - Upload Response
+// MARK: - Upload Response (202 Accepted)
 
-struct UploadResponse: Codable {
-    let success: Bool
+struct TourUploadResponse: Codable {
+    let status: String           // "queued"
     let apartmentId: Int?
-    let apartmentName: String?
-    let buildingName: String?
-    let filename: String?
-    let url: String?
-    let virtualTourType: String?
+    let message: String?
 
     enum CodingKeys: String, CodingKey {
-        case success
+        case status
         case apartmentId = "apartment_id"
-        case apartmentName = "apartment_name"
-        case buildingName = "building_name"
-        case filename, url
-        case virtualTourType = "virtual_tour_type"
+        case message
     }
 }
 
@@ -46,7 +43,7 @@ final class TourUploadService {
 
         var errorDescription: String? {
             switch self {
-            case .fileNotFound: return "Tour file not found."
+            case .fileNotFound: return "Tour bundle not found."
             case .invalidURL: return "Invalid server URL."
             case .serverError(_, let msg): return msg
             case .decodingError(let msg): return msg
@@ -54,22 +51,28 @@ final class TourUploadService {
         }
     }
 
-    /// Uploads a .usdz tour file to the backend.
+    /// Uploads a .rentletour ZIP bundle to the backend for processing.
+    ///
+    /// The backend will:
+    /// 1. Store the ZIP to S3
+    /// 2. Set tour_processing_status = "queued"
+    /// 3. Push an SQS message for Fargate processing
+    /// 4. Return 202 Accepted
     ///
     /// - Parameters:
-    ///   - fileURL: Local URL of the .usdz file
+    ///   - fileURL: Local URL of the .rentletour ZIP
     ///   - apartmentId: The server-side apartment ID
     ///   - token: Bearer auth token
     ///   - baseURL: The instance base URL
     ///   - onProgress: Optional progress callback (0.0–1.0)
-    /// - Returns: UploadResponse from the server
-    static func uploadTour(
+    /// - Returns: TourUploadResponse from the server
+    static func uploadTourBundle(
         fileURL: URL,
         apartmentId: Int,
         token: String,
         baseURL: String,
         onProgress: ((Double) -> Void)? = nil
-    ) async throws -> UploadResponse {
+    ) async throws -> TourUploadResponse {
 
         // Verify file exists
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
@@ -88,10 +91,10 @@ final class TourUploadService {
         let boundary = "Boundary-\(UUID().uuidString)"
         var body = Data()
 
-        // File part
+        // File part — application/zip
         body.append("--\(boundary)\r\n")
         body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileURL.lastPathComponent)\"\r\n")
-        body.append("Content-Type: model/vnd.usdz+zip\r\n\r\n")
+        body.append("Content-Type: application/zip\r\n\r\n")
         body.append(fileData)
         body.append("\r\n")
 
@@ -104,7 +107,7 @@ final class TourUploadService {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
-        request.timeoutInterval = 120 // 2 minutes for large files
+        request.timeoutInterval = 300 // 5 minutes — large ZIPs with textures
 
         // Report initial progress
         onProgress?(0.1)
@@ -117,7 +120,7 @@ final class TourUploadService {
             throw UploadError.serverError(0, "Invalid response")
         }
 
-        // Handle errors
+        // Handle success: 200 OK or 202 Accepted
         guard (200..<300).contains(httpResponse.statusCode) else {
             if let errorResp = try? JSONDecoder().decode(UploadErrorResponse.self, from: responseData) {
                 throw UploadError.serverError(httpResponse.statusCode, errorResp.error)
@@ -127,10 +130,15 @@ final class TourUploadService {
 
         onProgress?(1.0)
 
-        // Decode success response
+        // Decode response
         do {
-            return try JSONDecoder().decode(UploadResponse.self, from: responseData)
+            let decoder = JSONDecoder()
+            return try decoder.decode(TourUploadResponse.self, from: responseData)
         } catch {
+            // If we got 202 but response doesn't match exactly, treat as success
+            if httpResponse.statusCode == 202 {
+                return TourUploadResponse(status: "queued", apartmentId: apartmentId, message: "Accepted for processing")
+            }
             throw UploadError.decodingError("Invalid response from server")
         }
     }

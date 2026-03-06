@@ -113,6 +113,9 @@ final class ScanManager: ObservableObject {
     /// Spatial capture manager for 360 node captures.
     lazy var spatialCapture = SpatialCaptureManager(tourBundle: tourBundle)
 
+    /// Auto-texture capture manager for automated frame capture.
+    lazy var autoTextureCapture = AutoTextureCaptureManager(tourBundle: tourBundle)
+
     // MARK: Room management
 
     func addRoom(_ room: CapturedRoom, name: String = "Room") {
@@ -132,6 +135,7 @@ final class ScanManager: ObservableObject {
         uploadStatus = .pending
         uploadError = nil
         spatialCapture.reset()
+        autoTextureCapture.reset()
     }
 
     // MARK: Merge via StructureBuilder
@@ -217,12 +221,12 @@ final class ScanManager: ObservableObject {
 
     // MARK: Upload Tour to Backend
 
-    /// Uploads the exported .usdz file to the backend.
+    /// Upload status from the processing pipeline
+    @Published var processingStatus: String? = nil
+
+    /// Uploads the tour bundle ZIP to the backend for Fargate processing.
+    /// If no .rentletour ZIP exists, exports one first.
     func uploadTour(token: String, baseURL: String) async {
-        guard let fileURL = exportedFileURL else {
-            presentAlert("No exported file to upload. Export first.")
-            return
-        }
         guard let apartmentId = selectedApartmentId else {
             presentAlert("No apartment selected.")
             return
@@ -232,18 +236,40 @@ final class ScanManager: ObservableObject {
         uploadStatus = .uploading
         uploadError = nil
 
+        // Auto-export tour bundle if not already done
+        if exportedTourURL == nil {
+            let name = tourBundle.propertyName
+            await exportTourBundle(propertyName: name)
+        }
+
+        guard let tourZipURL = exportedTourURL else {
+            presentAlert("No tour bundle to upload. Export first.")
+            isUploading = false
+            uploadStatus = .failed("No tour bundle")
+            return
+        }
+
         do {
-            let response = try await TourUploadService.uploadTour(
-                fileURL: fileURL,
+            // Upload the full .rentletour ZIP bundle
+            let response = try await TourUploadService.uploadTourBundle(
+                fileURL: tourZipURL,
                 apartmentId: apartmentId,
                 token: token,
                 baseURL: baseURL
             )
-            if response.success {
-                uploadStatus = .uploaded
-            } else {
-                uploadStatus = .failed("Upload returned unsuccessful.")
-                uploadError = "Upload returned unsuccessful."
+
+            // Backend returns 202 — tour is queued for processing
+            processingStatus = response.status
+            uploadStatus = .uploaded
+            print("[ScanManager] ✓ Tour uploaded — status: \(response.status)")
+
+            // Start background status polling (fire-and-forget)
+            Task {
+                await pollProcessingStatus(
+                    apartmentId: apartmentId,
+                    token: token,
+                    baseURL: baseURL
+                )
             }
         } catch {
             uploadStatus = .failed(error.localizedDescription)
@@ -251,6 +277,32 @@ final class ScanManager: ObservableObject {
         }
 
         isUploading = false
+    }
+
+    /// Polls the backend for tour processing status until completion or failure.
+    private func pollProcessingStatus(
+        apartmentId: Int,
+        token: String,
+        baseURL: String
+    ) async {
+        do {
+            _ = try await TourProcessingService.pollUntilComplete(
+                apartmentId: apartmentId,
+                token: token,
+                baseURL: baseURL,
+                onStatusUpdate: { [weak self] status in
+                    Task { @MainActor in
+                        self?.processingStatus = status.status
+                        print("[ScanManager] Processing status: \(status.status)")
+                    }
+                }
+            )
+        } catch {
+            print("[ScanManager] Processing poll error: \(error.localizedDescription)")
+            await MainActor.run {
+                processingStatus = "failed"
+            }
+        }
     }
 
     // MARK: Share Sheet

@@ -99,11 +99,32 @@ struct ScanningScreen: View {
 
                     Spacer()
 
-                    // Room type selector
+                    // Auto-texture count badge
+                    HStack(spacing: 6) {
+                        Image(systemName: "camera.aperture")
+                            .font(.caption)
+                        Text("\(scanManager.autoTextureCapture.capturedFrameCount)")
+                            .font(.subheadline.weight(.semibold))
+                            .monospacedDigit()
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.green.opacity(0.6), in: Capsule())
+                    .opacity(scanManager.autoTextureCapture.capturedFrameCount > 0 ? 1 : 0.5)
+                    .animation(.easeOut(duration: 0.2), value: scanManager.autoTextureCapture.capturedFrameCount)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+
+                // Room type selector row
+                HStack {
+                    Spacer()
                     Menu {
                         ForEach(RoomType.allCases) { roomType in
                             Button {
                                 selectedRoomType = roomType
+                                scanManager.autoTextureCapture.setRoomIndex(scanManager.capturedRooms.count)
                             } label: {
                                 Label(roomType.rawValue, systemImage: roomType.icon)
                             }
@@ -124,7 +145,6 @@ struct ScanningScreen: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 8)
 
                 // ── Instructions banner (auto-fades) ──
                 if showInstructions && !scanComplete {
@@ -355,8 +375,17 @@ struct RoomPlanScanViewWithRef: UIViewRepresentable {
         let view = context.coordinator.setupCaptureView()
         context.coordinator.startSession()
 
+        // Pass reference back and start auto-texture capture
         DispatchQueue.main.async {
             captureViewRef = view
+            // Start auto-texture observer on the ARSession
+            scanManager.autoTextureCapture.startObserving(
+                arSession: view.captureSession.arSession
+            )
+            scanManager.autoTextureCapture.setRoomIndex(scanManager.capturedRooms.count)
+            // Wire up auto-node capture
+            scanManager.autoTextureCapture.setCaptureView(view)
+            scanManager.autoTextureCapture.setSpatialManager(scanManager.spatialCapture)
         }
 
         return view
@@ -365,6 +394,7 @@ struct RoomPlanScanViewWithRef: UIViewRepresentable {
     func updateUIView(_ uiView: RoomCaptureView, context: Context) {}
 
     static func dismantleUIView(_ uiView: RoomCaptureView, coordinator: RoomCaptureCoordinator) {
+        // Stop auto-texture capture before stopping the session
         coordinator.stopSession()
     }
 }

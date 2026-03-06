@@ -17,11 +17,25 @@ struct ApartmentDTO: Codable, Identifiable, Hashable {
     let tenantName: String?
     let tenantEmail: String?
     let label: String
+    let tourProcessingStatus: String?
+    let tourModelUrl: String?
+
+    /// Whether this apartment has a completed 3D tour
+    var hasTour: Bool {
+        tourProcessingStatus == "completed" && tourModelUrl != nil
+    }
+
+    /// Whether this apartment's tour is currently being processed
+    var isTourProcessing: Bool {
+        tourProcessingStatus == "queued" || tourProcessingStatus == "processing"
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, name, building, label
         case tenantName = "tenant_name"
         case tenantEmail = "tenant_email"
+        case tourProcessingStatus = "tour_processing_status"
+        case tourModelUrl = "tour_model_url"
     }
 }
 

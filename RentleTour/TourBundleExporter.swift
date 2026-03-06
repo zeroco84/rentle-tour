@@ -5,6 +5,7 @@
 //   structure.usdz      — The 3D model
 //   tour_data.json      — Manifest linking nodes to images
 //   panoramas/          — High-res images at each node
+//   textures/           — Auto-captured texture frames
 //   objects/             — Object capture models (if any)
 //
 // Exported as a .rentletour ZIP package.
@@ -61,6 +62,8 @@ final class TourBundleExporter {
         try fm.createDirectory(at: bundleDir, withIntermediateDirectories: true)
         let panoramasDir = bundleDir.appendingPathComponent("panoramas", isDirectory: true)
         try fm.createDirectory(at: panoramasDir, withIntermediateDirectories: true)
+        let texturesDir = bundleDir.appendingPathComponent("textures", isDirectory: true)
+        try fm.createDirectory(at: texturesDir, withIntermediateDirectories: true)
         let objectsDir = bundleDir.appendingPathComponent("objects", isDirectory: true)
         try fm.createDirectory(at: objectsDir, withIntermediateDirectories: true)
 
@@ -85,7 +88,16 @@ final class TourBundleExporter {
             }
         }
 
-        // 3. Copy object capture models
+        // 3. Copy auto-captured textures
+        for texture in tourBundle.textureFrames {
+            let sourceURL = tourBundle.texturesDirectory.appendingPathComponent(texture.imageFileName)
+            let destURL = texturesDir.appendingPathComponent(texture.imageFileName)
+            if fm.fileExists(atPath: sourceURL.path) {
+                try fm.copyItem(at: sourceURL, to: destURL)
+            }
+        }
+
+        // 4. Copy object capture models
         for obj in tourBundle.objects {
             let sourceURL = tourBundle.objectsDirectory.appendingPathComponent(obj.modelFileName)
             let destURL = objectsDir.appendingPathComponent(obj.modelFileName)
