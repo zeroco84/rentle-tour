@@ -173,11 +173,21 @@ struct ScanningScreen: View {
 
                 Spacer()
 
-                // ── Active scan controls (compact floating bar) ──
+                // ── Active scan controls (split L/R, no backdrop) ──
                 if !scanComplete {
-                    VStack(spacing: 8) {
-                        // Single row: 360° capture + node count + Done
-                        HStack(spacing: 10) {
+                    // Node guidance — small floating pill at bottom-center
+                    Text(nodeGuidanceText)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.black.opacity(0.4), in: Capsule())
+                        .padding(.bottom, 4)
+
+                    // Bottom row: capture left, done right
+                    HStack {
+                        // Left: 360° capture + node count
+                        HStack(spacing: 8) {
                             Button(action: capture360Node) {
                                 HStack(spacing: 6) {
                                     Image(systemName: "camera.circle.fill")
@@ -188,49 +198,37 @@ struct ScanningScreen: View {
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 10)
-                                .background(.ultraThinMaterial, in: Capsule())
-                                .overlay(Capsule().stroke(.white.opacity(0.3), lineWidth: 1))
+                                .background(.black.opacity(0.5), in: Capsule())
                             }
                             .disabled(scanManager.spatialCapture.isCapturing)
 
-                            // Node count badge
                             let nodeCount = scanManager.spatialCapture.capturedNodeCount
                             Text("\(nodeCount)")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.white)
                                 .frame(width: 32, height: 32)
                                 .background(
-                                    nodeCount > 0 ? AnyShapeStyle(.green.opacity(0.6)) : AnyShapeStyle(.ultraThinMaterial),
+                                    nodeCount > 0 ? AnyShapeStyle(.green.opacity(0.7)) : AnyShapeStyle(.black.opacity(0.4)),
                                     in: Circle()
                                 )
-
-                            Spacer()
-
-                            // Done button (inline)
-                            Button(action: finishScanning) {
-                                Text("Done")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 24)
-                                    .padding(.vertical, 10)
-                                    .background(.blue, in: Capsule())
-                            }
+                                .animation(.easeOut(duration: 0.2), value: nodeCount)
                         }
-                        .animation(.easeOut(duration: 0.2), value: scanManager.spatialCapture.capturedNodeCount)
 
-                        // Compact guidance
-                        Text(nodeGuidanceText)
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.6))
+                        Spacer()
+
+                        // Right: Done
+                        Button(action: finishScanning) {
+                            Text("Done")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 10)
+                                .background(.blue, in: Capsule())
+                        }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
                 }
-
-                Spacer()
-                    .frame(height: 4)
 
                 // Status indicator
                 HStack(spacing: 8) {
@@ -243,8 +241,8 @@ struct ScanningScreen: View {
                         .foregroundStyle(.white)
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial, in: Capsule())
+                .padding(.vertical, 6)
+                .background(.black.opacity(0.4), in: Capsule())
 
                 // ── Post-scan bar ──
                 if scanComplete {
