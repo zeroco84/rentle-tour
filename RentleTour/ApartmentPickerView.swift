@@ -1,9 +1,9 @@
 // ApartmentPickerView.swift
 // RentleTour
 //
-// Apartment search & picker sheet.
-// Presented when the admin taps + new.
-// Debounced search against the inspections endpoint.
+// Two-step apartment picker:
+//   1. Search for a building
+//   2. Browse apartments within that building
 // UI follows Apple iOS Human Interface Guidelines.
 
 import SwiftUI
@@ -22,19 +22,25 @@ struct ApartmentPickerSheet: View {
     @State private var isSearching = false
     @State private var errorMessage: String?
     @State private var hasSearched = false
-
-    // Debounce
     @State private var searchTask: Task<Void, Never>?
+
+    /// Unique buildings extracted from search results
+    private var buildings: [String] {
+        let names = results.compactMap { $0.building }
+        // Preserve order, deduplicate
+        var seen = Set<String>()
+        return names.filter { seen.insert($0).inserted }
+    }
 
     var body: some View {
         NavigationStack {
             List {
-                // Search field section
+                // Search field
                 Section {
                     HStack {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(.secondary)
-                        TextField("Search apartments…", text: $query)
+                        TextField("Search by building name…", text: $query)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .onChange(of: query) { _, newValue in
@@ -55,7 +61,6 @@ struct ApartmentPickerSheet: View {
                         }
                     }
 
-                    // Minimum characters hint
                     if query.count > 0 && query.count < 2 {
                         Text("Type at least 2 characters to search")
                             .font(.caption)
@@ -63,7 +68,7 @@ struct ApartmentPickerSheet: View {
                     }
                 }
 
-                // Error state
+                // Error
                 if let error = errorMessage {
                     Section {
                         Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -78,25 +83,33 @@ struct ApartmentPickerSheet: View {
                     }
                 }
 
-                // Results
-                if !results.isEmpty {
+                // Buildings list
+                if !buildings.isEmpty {
                     Section {
-                        ForEach(results) { apartment in
-                            Button {
-                                onSelect(apartment)
-                                dismiss()
+                        ForEach(buildings, id: \.self) { building in
+                            NavigationLink {
+                                BuildingApartmentsView(
+                                    buildingName: building,
+                                    apartments: results.filter { $0.building == building },
+                                    onSelect: { apartment in
+                                        onSelect(apartment)
+                                        dismiss()
+                                    }
+                                )
                             } label: {
-                                ApartmentRow(apartment: apartment)
+                                BuildingRow(
+                                    name: building,
+                                    apartmentCount: results.filter { $0.building == building }.count
+                                )
                             }
-                            .buttonStyle(.plain)
                         }
                     } header: {
-                        Text("\(results.count) results")
+                        Text("\(buildings.count) building\(buildings.count == 1 ? "" : "s")")
                     }
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("Select Apartment")
+            .navigationTitle("Select Building")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -155,6 +168,70 @@ struct ApartmentPickerSheet: View {
     }
 }
 
+// MARK: - Building Row
+
+struct BuildingRow: View {
+    let name: String
+    let apartmentCount: Int
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "building.2.fill")
+                .font(.title2)
+                .foregroundStyle(.blue)
+                .frame(width: 32)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(name)
+                    .font(.body.weight(.medium))
+
+                Text("\(apartmentCount) apartment\(apartmentCount == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Building Apartments View
+
+struct BuildingApartmentsView: View {
+    let buildingName: String
+    let apartments: [ApartmentDTO]
+    var onSelect: (ApartmentDTO) -> Void
+
+    @State private var searchText = ""
+
+    private var filteredApartments: [ApartmentDTO] {
+        if searchText.isEmpty {
+            return apartments
+        }
+        return apartments.filter {
+            $0.name.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    var body: some View {
+        List {
+            ForEach(filteredApartments) { apartment in
+                Button {
+                    onSelect(apartment)
+                } label: {
+                    ApartmentRow(apartment: apartment)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle(buildingName)
+        .navigationBarTitleDisplayMode(.large)
+        .searchable(text: $searchText, prompt: "Filter apartments…")
+    }
+}
+
 // MARK: - Apartment Row
 
 struct ApartmentRow: View {
@@ -162,31 +239,19 @@ struct ApartmentRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            // Status icon
-            Image(systemName: apartment.tenantName != nil ? "person.circle.fill" : "circle.dashed")
+            // Apartment type icon
+            Image(systemName: "door.left.hand.open")
                 .font(.title2)
-                .foregroundStyle(apartment.tenantName != nil ? .green : .orange)
+                .foregroundStyle(.green)
                 .frame(width: 32)
 
-            // Details
+            // Details — address and type only (no tenant info)
             VStack(alignment: .leading, spacing: 3) {
-                if let building = apartment.building {
-                    Text(building)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
                 Text(apartment.name)
                     .font(.body.weight(.medium))
 
-                if let tenant = apartment.tenantName {
-                    Label(tenant, systemImage: "person")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Vacant")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+                if let tourStatus = apartment.tourProcessingStatus {
+                    tourStatusBadge(tourStatus)
                 }
             }
 
@@ -197,5 +262,25 @@ struct ApartmentRow: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func tourStatusBadge(_ status: String) -> some View {
+        switch status {
+        case "completed":
+            Label("Tour ready", systemImage: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.green)
+        case "processing", "queued":
+            Label("Processing…", systemImage: "arrow.triangle.2.circlepath")
+                .font(.caption)
+                .foregroundStyle(.blue)
+        case "failed":
+            Label("Tour failed", systemImage: "exclamationmark.circle")
+                .font(.caption)
+                .foregroundStyle(.red)
+        default:
+            EmptyView()
+        }
     }
 }
