@@ -229,6 +229,9 @@ struct ScanningScreen: View {
                     .padding(.horizontal, 12)
                 }
 
+                Spacer()
+                    .frame(height: 4)
+
                 // Status indicator
                 HStack(spacing: 8) {
                     Circle()
@@ -242,7 +245,6 @@ struct ScanningScreen: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(.ultraThinMaterial, in: Capsule())
-                .padding(.bottom, 8)
 
                 // ── Post-scan bar ──
                 if scanComplete {
