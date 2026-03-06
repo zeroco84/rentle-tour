@@ -2,8 +2,8 @@
 // RentleTour
 //
 // Two-step apartment picker:
-//   1. Search for a building
-//   2. Browse apartments within that building
+//   1. Buildings list (loaded on appear, filterable)
+//   2. Apartment search within selected building
 // UI follows Apple iOS Human Interface Guidelines.
 
 import SwiftUI
@@ -17,6 +17,145 @@ struct ApartmentPickerSheet: View {
 
     var onSelect: (ApartmentDTO) -> Void
 
+    @State private var buildings: [BuildingDTO] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var searchText = ""
+
+    /// Buildings filtered by local search text
+    private var filteredBuildings: [BuildingDTO] {
+        if searchText.isEmpty {
+            return buildings
+        }
+        return buildings.filter {
+            $0.name.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if isLoading {
+                    VStack(spacing: 16) {
+                        ProgressView()
+                        Text("Loading buildings…")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxHeight: .infinity)
+                } else if let error = errorMessage {
+                    ContentUnavailableView {
+                        Label("Unable to Load", systemImage: "exclamationmark.triangle.fill")
+                    } description: {
+                        Text(error)
+                    } actions: {
+                        Button("Retry") {
+                            Task { await loadBuildings() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                } else if filteredBuildings.isEmpty && !searchText.isEmpty {
+                    ContentUnavailableView.search(text: searchText)
+                } else if buildings.isEmpty {
+                    ContentUnavailableView {
+                        Label("No Buildings", systemImage: "building.2")
+                    } description: {
+                        Text("No buildings found for this account.")
+                    }
+                } else {
+                    List {
+                        ForEach(filteredBuildings) { building in
+                            NavigationLink {
+                                BuildingApartmentsView(
+                                    building: building,
+                                    onSelect: { apartment in
+                                        onSelect(apartment)
+                                        dismiss()
+                                    }
+                                )
+                                .environmentObject(authManager)
+                            } label: {
+                                BuildingRow(building: building)
+                            }
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                }
+            }
+            .navigationTitle("Select Building")
+            .navigationBarTitleDisplayMode(.large)
+            .searchable(text: $searchText, prompt: "Filter buildings…")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .task {
+                await loadBuildings()
+            }
+        }
+    }
+
+    // MARK: - Load Buildings
+
+    private func loadBuildings() async {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            let token = authManager.authToken ?? ""
+            let baseURL = authManager.activeBaseURL
+            let result = try await ApartmentService.fetchBuildings(
+                token: token,
+                baseURL: baseURL
+            )
+
+            buildings = result.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+            isLoading = false
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+        }
+    }
+}
+
+// MARK: - Building Row
+
+struct BuildingRow: View {
+    let building: BuildingDTO
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "building.2.fill")
+                .font(.title2)
+                .foregroundStyle(.blue)
+                .frame(width: 32)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(building.name)
+                    .font(.body.weight(.medium))
+
+                if let count = building.apartmentCount {
+                    Text("\(count) apartment\(count == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Building Apartments View
+
+struct BuildingApartmentsView: View {
+    @EnvironmentObject var authManager: AuthManager
+
+    let building: BuildingDTO
+    var onSelect: (ApartmentDTO) -> Void
+
     @State private var query = ""
     @State private var results: [ApartmentDTO] = []
     @State private var isSearching = false
@@ -24,99 +163,75 @@ struct ApartmentPickerSheet: View {
     @State private var hasSearched = false
     @State private var searchTask: Task<Void, Never>?
 
-    /// Unique buildings extracted from search results
-    private var buildings: [String] {
-        let names = results.compactMap { $0.building }
-        // Preserve order, deduplicate
-        var seen = Set<String>()
-        return names.filter { seen.insert($0).inserted }
-    }
-
     var body: some View {
-        NavigationStack {
-            List {
-                // Search field
-                Section {
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(.secondary)
-                        TextField("Search by building name…", text: $query)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .onChange(of: query) { _, newValue in
-                                debounceSearch(newValue)
-                            }
-                        if isSearching {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        } else if !query.isEmpty {
-                            Button {
-                                query = ""
-                                results = []
-                                hasSearched = false
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                            }
+        List {
+            // Search field
+            Section {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("Search apartments…", text: $query)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .onChange(of: query) { _, newValue in
+                            debounceSearch(newValue)
+                        }
+                    if isSearching {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else if !query.isEmpty {
+                        Button {
+                            query = ""
+                            results = []
+                            hasSearched = false
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
                         }
                     }
-
-                    if query.count > 0 && query.count < 2 {
-                        Text("Type at least 2 characters to search")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                 }
 
-                // Error
-                if let error = errorMessage {
-                    Section {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                    }
-                }
-
-                // Empty state
-                if hasSearched && results.isEmpty && !isSearching && errorMessage == nil {
-                    Section {
-                        ContentUnavailableView.search(text: query)
-                    }
-                }
-
-                // Buildings list
-                if !buildings.isEmpty {
-                    Section {
-                        ForEach(buildings, id: \.self) { building in
-                            NavigationLink {
-                                BuildingApartmentsView(
-                                    buildingName: building,
-                                    apartments: results.filter { $0.building == building },
-                                    onSelect: { apartment in
-                                        onSelect(apartment)
-                                        dismiss()
-                                    }
-                                )
-                            } label: {
-                                BuildingRow(
-                                    name: building,
-                                    apartmentCount: results.filter { $0.building == building }.count
-                                )
-                            }
-                        }
-                    } header: {
-                        Text("\(buildings.count) building\(buildings.count == 1 ? "" : "s")")
-                    }
+                if query.count > 0 && query.count < 2 {
+                    Text("Type at least 2 characters")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .listStyle(.insetGrouped)
-            .navigationTitle("Select Building")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
+
+            // Error
+            if let error = errorMessage {
+                Section {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                }
+            }
+
+            // Empty state
+            if hasSearched && results.isEmpty && !isSearching && errorMessage == nil {
+                Section {
+                    ContentUnavailableView.search(text: query)
+                }
+            }
+
+            // Results
+            if !results.isEmpty {
+                Section {
+                    ForEach(results) { apartment in
+                        Button {
+                            onSelect(apartment)
+                        } label: {
+                            ApartmentRow(apartment: apartment)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    Text("\(results.count) apartment\(results.count == 1 ? "" : "s")")
                 }
             }
         }
+        .listStyle(.insetGrouped)
+        .navigationTitle(building.name)
+        .navigationBarTitleDisplayMode(.large)
     }
 
     // MARK: - Debounced Search
@@ -150,7 +265,8 @@ struct ApartmentPickerSheet: View {
             let apartments = try await ApartmentService.searchApartments(
                 query: query,
                 token: token,
-                baseURL: baseURL
+                baseURL: baseURL,
+                buildingName: building.name
             )
 
             await MainActor.run {
@@ -168,70 +284,6 @@ struct ApartmentPickerSheet: View {
     }
 }
 
-// MARK: - Building Row
-
-struct BuildingRow: View {
-    let name: String
-    let apartmentCount: Int
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "building.2.fill")
-                .font(.title2)
-                .foregroundStyle(.blue)
-                .frame(width: 32)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(name)
-                    .font(.body.weight(.medium))
-
-                Text("\(apartmentCount) apartment\(apartmentCount == 1 ? "" : "s")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-// MARK: - Building Apartments View
-
-struct BuildingApartmentsView: View {
-    let buildingName: String
-    let apartments: [ApartmentDTO]
-    var onSelect: (ApartmentDTO) -> Void
-
-    @State private var searchText = ""
-
-    private var filteredApartments: [ApartmentDTO] {
-        if searchText.isEmpty {
-            return apartments
-        }
-        return apartments.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText)
-        }
-    }
-
-    var body: some View {
-        List {
-            ForEach(filteredApartments) { apartment in
-                Button {
-                    onSelect(apartment)
-                } label: {
-                    ApartmentRow(apartment: apartment)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .listStyle(.insetGrouped)
-        .navigationTitle(buildingName)
-        .navigationBarTitleDisplayMode(.large)
-        .searchable(text: $searchText, prompt: "Filter apartments…")
-    }
-}
-
 // MARK: - Apartment Row
 
 struct ApartmentRow: View {
@@ -239,13 +291,11 @@ struct ApartmentRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            // Apartment type icon
             Image(systemName: "door.left.hand.open")
                 .font(.title2)
                 .foregroundStyle(.green)
                 .frame(width: 32)
 
-            // Details — address and type only (no tenant info)
             VStack(alignment: .leading, spacing: 3) {
                 Text(apartment.name)
                     .font(.body.weight(.medium))
