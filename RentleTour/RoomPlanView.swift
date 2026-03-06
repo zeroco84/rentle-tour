@@ -4,7 +4,7 @@
 // SwiftUI wrapper around RoomPlan's RoomCaptureView (UIKit).
 // Presented full-screen during a scanning session.
 // Includes "Capture 360° View" button for spatial node capture.
-// Styled to match Rentle-Assist terminal branding.
+// UI follows Apple iOS Human Interface Guidelines.
 
 import SwiftUI
 import RoomPlan
@@ -15,7 +15,6 @@ struct RoomPlanScanView: UIViewRepresentable {
     @EnvironmentObject var scanManager: ScanManager
     var roomName: String = "Room"
 
-    /// Closure fired when the scan finishes and a CapturedRoom is ready.
     var onScanFinished: () -> Void
 
     func makeCoordinator() -> RoomCaptureCoordinator {
@@ -40,14 +39,11 @@ struct RoomPlanScanView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> RoomCaptureView {
         let view = context.coordinator.setupCaptureView()
-        // Start the capture session immediately so the camera/LiDAR feed appears
         context.coordinator.startSession()
         return view
     }
 
-    func updateUIView(_ uiView: RoomCaptureView, context: Context) {
-        // No dynamic updates needed; session lifecycle handled by coordinator.
-    }
+    func updateUIView(_ uiView: RoomCaptureView, context: Context) {}
 
     static func dismantleUIView(_ uiView: RoomCaptureView, coordinator: RoomCaptureCoordinator) {
         coordinator.stopSession()
@@ -80,7 +76,7 @@ struct ScanningScreen: View {
             )
             .ignoresSafeArea()
 
-            // ── Capture flash overlay ──
+            // Capture flash overlay
             if showCaptureFlash {
                 Color.white.opacity(0.3)
                     .ignoresSafeArea()
@@ -94,21 +90,16 @@ struct ScanningScreen: View {
                     Button {
                         dismiss()
                     } label: {
-                        Text("× close")
-                            .font(.custom("Courier", size: 12))
-                            .foregroundStyle(RentleBrand.green)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(RentleBrand.background.opacity(0.85))
-                            .overlay(
-                                Rectangle()
-                                    .stroke(RentleBrand.border, lineWidth: 1)
-                            )
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(.ultraThinMaterial, in: Circle())
                     }
 
                     Spacer()
 
-                    // Room type selector (dropdown)
+                    // Room type selector
                     Menu {
                         ForEach(RoomType.allCases) { roomType in
                             Button {
@@ -120,21 +111,16 @@ struct ScanningScreen: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: selectedRoomType.icon)
-                                .font(.system(size: 11))
-                            Text(selectedRoomType.terminalLabel)
-                                .font(.custom("Courier", size: 12))
-                                .tracking(1)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 8, weight: .bold))
+                                .font(.subheadline)
+                            Text(selectedRoomType.rawValue)
+                                .font(.subheadline.weight(.medium))
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption2.weight(.bold))
                         }
-                        .foregroundStyle(RentleBrand.textPrimary)
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(RentleBrand.background.opacity(0.85))
-                        .overlay(
-                            Rectangle()
-                                .stroke(RentleBrand.border, lineWidth: 1)
-                        )
+                        .background(.ultraThinMaterial, in: Capsule())
                     }
                 }
                 .padding(.horizontal, 16)
@@ -143,19 +129,16 @@ struct ScanningScreen: View {
                 // ── Instructions banner (auto-fades) ──
                 if showInstructions && !scanComplete {
                     VStack(spacing: 4) {
-                        Text("// slowly walk through the room")
-                            .font(.custom("Courier", size: 12))
-                            .foregroundStyle(RentleBrand.textPrimary)
-                            .tracking(0.5)
-                        Text("tap capture_360° at key viewpoints")
-                            .font(.custom("Courier", size: 11))
-                            .foregroundStyle(RentleBrand.textSecondary)
-                            .tracking(0.5)
+                        Text("Slowly walk through the room")
+                            .font(.subheadline.weight(.medium))
+                        Text("Tap Capture 360° at key viewpoints")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.7))
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(RentleBrand.background.opacity(0.85))
-                    .overlay(Rectangle().stroke(RentleBrand.border, lineWidth: 1))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                     .padding(.horizontal, 32)
                     .padding(.top, 8)
                     .transition(.opacity)
@@ -170,66 +153,52 @@ struct ScanningScreen: View {
 
                 Spacer()
 
-                // ── 360° Capture Button + Done Button (during active scan) ──
+                // ── Active scan controls ──
                 if !scanComplete {
-                    VStack(spacing: 10) {
+                    VStack(spacing: 12) {
                         // 360° capture row
                         HStack(spacing: 12) {
-                            // Capture 360° View button
                             Button(action: capture360Node) {
                                 HStack(spacing: 8) {
                                     Image(systemName: "camera.circle.fill")
-                                        .font(.system(size: 18))
-                                    Text("capture_360°")
-                                        .font(.custom("Courier", size: 12).weight(.bold))
-                                        .tracking(1)
+                                        .font(.title3)
+                                    Text("Capture 360°")
+                                        .font(.subheadline.weight(.semibold))
                                 }
-                                .foregroundStyle(RentleBrand.green)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .background(RentleBrand.background.opacity(0.85))
-                                .overlay(
-                                    Rectangle()
-                                        .stroke(RentleBrand.green.opacity(0.6), lineWidth: 1)
-                                )
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 12)
+                                .background(.ultraThinMaterial, in: Capsule())
+                                .overlay(Capsule().stroke(.white.opacity(0.3), lineWidth: 1))
                             }
                             .disabled(scanManager.spatialCapture.isCapturing)
 
-                            // Node count indicator
+                            // Node count badge
                             let nodeCount = scanManager.spatialCapture.capturedNodeCount
-                            Text("[\(nodeCount)] node\(nodeCount == 1 ? "" : "s")")
-                                .font(.custom("Courier", size: 12))
-                                .foregroundStyle(nodeCount > 0 ? RentleBrand.green : RentleBrand.textMuted)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 8)
-                                .background(RentleBrand.background.opacity(0.85))
-                                .overlay(
-                                    Rectangle()
-                                        .stroke(
-                                            nodeCount > 0
-                                                ? RentleBrand.green.opacity(0.3)
-                                                : RentleBrand.border,
-                                            lineWidth: 1
-                                        )
+                            Text("\(nodeCount)")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .frame(width: 36, height: 36)
+                                .background(
+                                    nodeCount > 0 ? AnyShapeStyle(.green.opacity(0.6)) : AnyShapeStyle(.ultraThinMaterial),
+                                    in: Circle()
                                 )
                         }
                         .animation(.easeOut(duration: 0.2), value: scanManager.spatialCapture.capturedNodeCount)
 
-                        // Node guidance hint
+                        // Node guidance
                         Text(nodeGuidanceText)
-                            .font(.custom("Courier", size: 10))
-                            .foregroundStyle(RentleBrand.textMuted)
-                            .tracking(0.5)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.7))
 
-                        // ── Done Scanning button ──
+                        // Done Scanning
                         Button(action: finishScanning) {
-                            Text("done_scanning />")
-                                .font(.custom("Courier", size: 14).weight(.bold))
-                                .foregroundStyle(RentleBrand.background)
-                                .tracking(2)
+                            Text("Done Scanning")
+                                .font(.headline)
+                                .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(Color(hex: "E8E6E3"))
+                                .padding(.vertical, 14)
+                                .background(.blue, in: RoundedRectangle(cornerRadius: 12))
                         }
                         .padding(.horizontal, 20)
                     }
@@ -239,41 +208,29 @@ struct ScanningScreen: View {
                 // Status indicator
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(scanComplete ? RentleBrand.green : RentleBrand.blue)
+                        .fill(scanComplete ? .green : .blue)
                         .frame(width: 8, height: 8)
-                        .shadow(
-                            color: (scanComplete ? RentleBrand.green : RentleBrand.blue).opacity(0.5),
-                            radius: 6
-                        )
 
-                    Text(scanComplete ? "status: captured" : "status: scanning")
-                        .font(.custom("Courier", size: 11))
-                        .foregroundStyle(RentleBrand.textSecondary)
-                        .tracking(1)
+                    Text(scanComplete ? "Captured" : "Scanning…")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.white)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(RentleBrand.background.opacity(0.85))
-                .overlay(
-                    Rectangle()
-                        .stroke(RentleBrand.border, lineWidth: 1)
-                )
+                .background(.ultraThinMaterial, in: Capsule())
                 .padding(.bottom, 8)
 
-                // ── Bottom action bar (after scan completes) ──
+                // ── Post-scan bar ──
                 if scanComplete {
-                    VStack(spacing: 12) {
-                        Text("// scan captured successfully")
-                            .font(.custom("Courier", size: 12))
-                            .foregroundStyle(RentleBrand.green)
-                            .tracking(1)
+                    VStack(spacing: 16) {
+                        Label("Scan captured successfully", systemImage: "checkmark.circle.fill")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.green)
 
-                        // Node summary
                         if scanManager.spatialCapture.capturedNodeCount > 0 {
-                            Text("✓ \(scanManager.spatialCapture.capturedNodeCount) tour node(s) captured")
-                                .font(.custom("Courier", size: 11))
-                                .foregroundStyle(RentleBrand.textSecondary)
-                                .tracking(0.5)
+                            Text("\(scanManager.spatialCapture.capturedNodeCount) tour node(s) captured")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
 
                         HStack(spacing: 12) {
@@ -281,37 +238,29 @@ struct ScanningScreen: View {
                                 scanComplete = false
                                 dismiss()
                             } label: {
-                                Text("scan_another />")
-                                    .font(.custom("Courier", size: 12).weight(.bold))
-                                    .foregroundStyle(RentleBrand.blue)
-                                    .tracking(1)
-                                    .padding(.horizontal, 16)
+                                Text("Scan Another")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.blue)
+                                    .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
-                                    .overlay(
-                                        Rectangle()
-                                            .stroke(RentleBrand.blue, lineWidth: 1)
-                                    )
+                                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(.blue.opacity(0.5), lineWidth: 1))
                             }
 
                             Button {
                                 dismiss()
                             } label: {
-                                Text("done />")
-                                    .font(.custom("Courier", size: 12).weight(.bold))
-                                    .foregroundStyle(RentleBrand.background)
-                                    .tracking(1)
-                                    .padding(.horizontal, 16)
+                                Text("Done")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
-                                    .background(RentleBrand.textPrimary)
+                                    .background(.blue, in: RoundedRectangle(cornerRadius: 10))
                             }
                         }
                     }
                     .padding(20)
-                    .background(RentleBrand.surface.opacity(0.95))
-                    .overlay(
-                        Rectangle()
-                            .stroke(RentleBrand.border, lineWidth: 1)
-                    )
+                    .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 16))
                     .padding(.horizontal, 16)
                     .padding(.bottom, 16)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -332,25 +281,21 @@ struct ScanningScreen: View {
     private var nodeGuidanceText: String {
         let count = scanManager.spatialCapture.capturedNodeCount
         if count == 0 {
-            return "// capture 3-5 nodes for best results"
+            return "Capture 3–5 nodes for best results"
         } else if count < 3 {
-            return "// \(3 - count) more recommended (3-5 optimal)"
+            return "\(3 - count) more recommended (3–5 optimal)"
         } else if count <= 5 {
-            return "// ✓ good coverage — add more or tap done"
+            return "Good coverage — add more or tap done"
         } else {
-            return "// ✓ excellent coverage"
+            return "Excellent coverage"
         }
     }
 
     // MARK: - Finish Scanning
 
     private func finishScanning() {
-        // Haptic feedback
         let impact = UIImpactFeedbackGenerator(style: .heavy)
         impact.impactOccurred()
-
-        // Stop the RoomCaptureSession — this triggers the delegate
-        // which will process the scan and call onScanFinished
         captureView?.captureSession.stop()
     }
 
@@ -380,8 +325,6 @@ struct ScanningScreen: View {
 
 // MARK: - RoomPlanScanView with Ref (exposes captureView)
 
-/// Variant that passes the RoomCaptureView reference back to the parent
-/// so SpatialCaptureManager can access the ARSession.
 struct RoomPlanScanViewWithRef: UIViewRepresentable {
     var scanManager: ScanManager
     @Binding var captureViewRef: RoomCaptureView?
@@ -412,7 +355,6 @@ struct RoomPlanScanViewWithRef: UIViewRepresentable {
         let view = context.coordinator.setupCaptureView()
         context.coordinator.startSession()
 
-        // Pass the view reference back
         DispatchQueue.main.async {
             captureViewRef = view
         }

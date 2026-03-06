@@ -2,7 +2,7 @@
 // RentleTour
 //
 // Main app navigation: Property list → Scanning → Review / Export.
-// Branded to match the Rentle-Assist terminal aesthetic.
+// UI follows Apple iOS Human Interface Guidelines.
 
 import SwiftUI
 
@@ -19,7 +19,7 @@ struct Property: Identifiable {
     var dateCreated: Date = .now
 }
 
-// MARK: - Rentle Brand Colors
+// MARK: - Rentle Brand Colors (Splash / Login only)
 
 enum RentleBrand {
     // Core backgrounds
@@ -45,7 +45,7 @@ enum RentleBrand {
     static let orange         = Color(hex: "FF9F0A")
 }
 
-// MARK: - Content View (Landing Screen)
+// MARK: - Content View (Dashboard)
 
 struct ContentView: View {
     @EnvironmentObject var scanManager: ScanManager
@@ -61,72 +61,29 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                // Pure black background with subtle radial glows
-                RentleBrand.background.ignoresSafeArea()
-
-                // Subtle blue glow top-right
-                RadialGradient(
-                    colors: [Color(hex: "1a237e").opacity(0.08), .clear],
-                    center: .topTrailing,
-                    startRadius: 0,
-                    endRadius: UIScreen.main.bounds.width * 1.5
-                )
-                .ignoresSafeArea()
-
-                // Subtle blue glow bottom-left
-                RadialGradient(
-                    colors: [Color(hex: "1a237e").opacity(0.06), .clear],
-                    center: .bottomLeading,
-                    startRadius: 0,
-                    endRadius: UIScreen.main.bounds.width * 1.5
-                )
-                .ignoresSafeArea()
-
-                VStack(spacing: 0) {
-                    if properties.isEmpty {
-                        emptyStateView
-                    } else {
-                        propertyList
-                    }
+            Group {
+                if properties.isEmpty {
+                    emptyStateView
+                } else {
+                    propertyListView
                 }
             }
-            .navigationTitle("")
+            .navigationTitle("Tours")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
+                    Button("Sign Out", role: .destructive) {
                         authManager.logout()
-                    } label: {
-                        Text("logout")
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(RentleBrand.red.opacity(0.8))
                     }
-                }
-                ToolbarItem(placement: .principal) {
-                    VStack(spacing: 2) {
-                        Text(EnvironmentConfig.appTitle.lowercased().replacingOccurrences(of: " ", with: "_"))
-                            .font(.system(.subheadline, design: .monospaced))
-                            .foregroundStyle(RentleBrand.textPrimary)
-                            .tracking(1)
-                        if let user = authManager.user {
-                            Text(user.displayName.lowercased())
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(RentleBrand.textSecondary)
-                        }
-                    }
+                    .font(.subheadline)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         startNewProperty()
                     } label: {
-                        Text("+ new")
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(RentleBrand.green)
+                        Image(systemName: "plus")
                     }
                 }
             }
-            .toolbarBackground(RentleBrand.background, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .sheet(isPresented: $showApartmentPicker) {
                 ApartmentPickerSheet { apartment in
                     handleApartmentSelected(apartment)
@@ -140,7 +97,6 @@ struct ContentView: View {
                         if let idx = activePropertyIndex {
                             properties[idx].roomCount = scanManager.capturedRooms.count
                         }
-                        // Show review if rooms were captured OR nodes were captured
                         if !scanManager.capturedRooms.isEmpty || !scanManager.tourBundle.nodes.isEmpty {
                             showReview = true
                         }
@@ -165,7 +121,7 @@ struct ContentView: View {
             .alert("LiDAR Not Available", isPresented: $showUnsupportedAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("This app requires a LiDAR-equipped device (iPhone 12 Pro or later, or iPad Pro). Your device does not support room scanning.")
+                Text("This app requires a LiDAR-equipped device (iPhone 12 Pro or later, or iPad Pro).")
             }
             .confirmationDialog(
                 "Property Options",
@@ -175,16 +131,13 @@ struct ContentView: View {
                 Button("View Results") {
                     showReview = true
                 }
-
                 Button("Add More Rooms") {
-                    // Continue scanning without clearing existing data
                     guard DeviceCapability.supportsLiDAR else {
                         showUnsupportedAlert = true
                         return
                     }
                     showScanner = true
                 }
-
                 Button("Re-scan", role: .destructive) {
                     scanManager.clearAll()
                     if let idx = activePropertyIndex {
@@ -197,116 +150,44 @@ struct ContentView: View {
                     }
                     showScanner = true
                 }
-
                 Button("Cancel", role: .cancel) {}
             }
         }
-        .preferredColorScheme(.dark)
     }
 
-    // MARK: Sub-views
+    // MARK: - Empty State
 
     private var emptyStateView: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            // ASCII art building
-            VStack(spacing: 0) {
-                Text("┌──────────────────┐")
-                Text("│  ╔══╗  ╔══╗  ╔══╗│")
-                Text("│  ║▓▓║  ║░░║  ║▓▓║│")
-                Text("│  ╚══╝  ╚══╝  ╚══╝│")
-                Text("│  ═══════════════ ││")
-                Text("│  ▓▓▓▓▓ ░░░ ▓▓▓▓ ││")
-                Text("└──────────────────┘")
-            }
-            .font(.system(size: 14, design: .monospaced))
-            .foregroundStyle(RentleBrand.textMuted.opacity(0.8))
-            .padding(20)
-            .overlay(
-                Rectangle()
-                    .stroke(RentleBrand.borderAlt, lineWidth: 1)
-            )
-
-            VStack(spacing: 8) {
-                Text("// no properties scanned")
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundStyle(RentleBrand.textSecondary)
-                    .tracking(1.5)
-
-                Text("tap '+ new' to select an apartment")
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(RentleBrand.textMuted)
-            }
-
+        ContentUnavailableView {
+            Label("No Tours", systemImage: "camera.viewfinder")
+        } description: {
+            Text("Tap the + button to select an apartment and start scanning.")
+        } actions: {
             Button {
                 startNewProperty()
             } label: {
-                Text("select_apartment />")
-                    .font(.custom("Courier", size: 14).weight(.bold))
-                    .foregroundStyle(RentleBrand.background)
-                    .tracking(2)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color(hex: "E8E6E3"))
+                Text("New Tour")
             }
-            .padding(.horizontal, 36)
-            .padding(.top, 8)
-
-            Spacer()
-
-            // Footer
-            HStack {
-                Text("v1.0.0  tour_app")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(RentleBrand.textMuted)
-                    .tracking(1)
-
-                Spacer()
-
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(RentleBrand.green)
-                        .frame(width: 6, height: 6)
-                        .shadow(color: RentleBrand.green.opacity(0.5), radius: 6)
-
-                    Text("lidar_ready")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(RentleBrand.green.opacity(0.4))
-                        .tracking(1)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
+            .buttonStyle(.borderedProminent)
         }
     }
 
-    private var propertyList: some View {
-        VStack(spacing: 0) {
-            // Terminal-style header
-            HStack {
-                Text("// properties[\(properties.count)]")
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(RentleBrand.textSecondary)
-                    .tracking(1.5)
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+    // MARK: - Property List
 
-            ScrollView {
-                LazyVStack(spacing: 1) {
-                    ForEach(Array(properties.enumerated()), id: \.element.id) { index, property in
-                        PropertyCard(property: property) {
+    private var propertyListView: some View {
+        List {
+            Section {
+                ForEach(Array(properties.enumerated()), id: \.element.id) { index, property in
+                    PropertyRow(property: property)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
                             activePropertyIndex = index
                             scanManager.selectedApartmentId = property.apartmentId
                             scanManager.selectedApartmentLabel = property.name
 
                             if property.roomCount > 0 || property.uploadStatus == .uploaded {
-                                // Property has data — show options
                                 showPropertyActions = true
                             } else {
-                                // Fresh property — start scanning
                                 scanManager.clearAll()
                                 guard DeviceCapability.supportsLiDAR else {
                                     showUnsupportedAlert = true
@@ -315,31 +196,17 @@ struct ContentView: View {
                                 showScanner = true
                             }
                         }
-                    }
                 }
-                .padding(.horizontal, 16)
+            } header: {
+                if let user = authManager.user {
+                    Text("Logged in as \(user.displayName)")
+                }
             }
-
-            // Footer
-            HStack {
-                Text("v1.0.0  tour_app")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(RentleBrand.textMuted)
-                    .tracking(1)
-
-                Spacer()
-
-                Text("sec_v1.0 encrypted")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(RentleBrand.green.opacity(0.4))
-                    .tracking(1)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
         }
+        .listStyle(.insetGrouped)
     }
 
-    // MARK: Actions
+    // MARK: - Actions
 
     private func startNewProperty() {
         showApartmentPicker = true
@@ -366,94 +233,93 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Property Card
+// MARK: - Property Row
 
-struct PropertyCard: View {
+struct PropertyRow: View {
     let property: Property
-    var onScan: () -> Void
 
     var body: some View {
-        Button(action: onScan) {
-            HStack(spacing: 14) {
-                // Status indicator
-                VStack(spacing: 4) {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 8, height: 8)
-                        .shadow(color: statusColor.opacity(0.5), radius: 6)
+        HStack(spacing: 14) {
+            // Status icon
+            Image(systemName: statusIcon)
+                .font(.title3)
+                .foregroundStyle(statusColor)
+                .frame(width: 32)
+
+            // Details
+            VStack(alignment: .leading, spacing: 3) {
+                if let building = property.buildingName {
+                    Text(building)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
-                // Details
-                VStack(alignment: .leading, spacing: 4) {
-                    // Building name
-                    if let building = property.buildingName {
-                        Text(building.lowercased().replacingOccurrences(of: " ", with: "_"))
-                            .font(.custom("Courier", size: 11))
-                            .foregroundStyle(RentleBrand.textSecondary)
-                            .tracking(0.5)
-                    }
+                Text(property.name)
+                    .font(.body)
+                    .lineLimit(2)
 
-                    Text(property.name.lowercased().replacingOccurrences(of: " ", with: "_"))
-                        .font(.custom("Courier", size: 14))
-                        .foregroundStyle(RentleBrand.textPrimary)
-                        .lineLimit(1)
+                HStack(spacing: 12) {
+                    Label("\(property.roomCount)", systemImage: "cube.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
-                    HStack(spacing: 16) {
-                        Text("rooms: \(property.roomCount)")
-                            .foregroundStyle(RentleBrand.textSecondary)
-
-                        uploadStatusBadge
-                    }
-                    .font(.custom("Courier", size: 11))
+                    statusBadge
                 }
-
-                Spacer()
-
-                // Scan action
-                Text(">")
-                    .font(.custom("Courier", size: 16).weight(.bold))
-                    .foregroundStyle(RentleBrand.green)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(RentleBrand.surface)
-            .overlay(
-                Rectangle()
-                    .stroke(RentleBrand.border, lineWidth: 1)
-            )
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 4)
+    }
+
+    private var statusIcon: String {
+        switch property.uploadStatus {
+        case .uploaded: return "checkmark.circle.fill"
+        case .uploading: return "arrow.up.circle.fill"
+        case .failed: return "exclamationmark.circle.fill"
+        case .pending:
+            return property.exportedURL != nil ? "checkmark.circle" : "circle.dashed"
+        }
     }
 
     private var statusColor: Color {
         switch property.uploadStatus {
-        case .uploaded: return RentleBrand.green
-        case .uploading: return RentleBrand.blue
-        case .failed: return RentleBrand.red
+        case .uploaded: return .green
+        case .uploading: return .blue
+        case .failed: return .red
         case .pending:
-            return property.exportedURL != nil ? RentleBrand.green : RentleBrand.orange
+            return property.exportedURL != nil ? .green : .orange
         }
     }
 
     @ViewBuilder
-    private var uploadStatusBadge: some View {
+    private var statusBadge: some View {
         switch property.uploadStatus {
         case .uploaded:
-            Text("✓ uploaded")
-                .foregroundStyle(RentleBrand.green)
+            Label("Uploaded", systemImage: "checkmark.icloud.fill")
+                .font(.caption2)
+                .foregroundStyle(.green)
         case .uploading:
-            Text("uploading...")
-                .foregroundStyle(RentleBrand.blue)
+            Label("Uploading", systemImage: "arrow.up.circle")
+                .font(.caption2)
+                .foregroundStyle(.blue)
         case .failed:
-            Text("✗ failed")
-                .foregroundStyle(RentleBrand.red)
+            Label("Failed", systemImage: "xmark.circle")
+                .font(.caption2)
+                .foregroundStyle(.red)
         case .pending:
             if property.exportedURL != nil {
-                Text("✓ exported")
-                    .foregroundStyle(RentleBrand.green)
+                Label("Exported", systemImage: "checkmark")
+                    .font(.caption2)
+                    .foregroundStyle(.green)
             } else {
-                Text("pending")
-                    .foregroundStyle(RentleBrand.orange)
+                Label("Pending", systemImage: "clock")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
             }
         }
     }
@@ -470,139 +336,184 @@ struct ReviewScreen: View {
     var onUploadComplete: (() -> Void)?
 
     @State private var showDollhouse = false
+    @State private var showAllNodes = false
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                RentleBrand.background.ignoresSafeArea()
-
-                // Subtle glow
-                RadialGradient(
-                    colors: [Color(hex: "1a237e").opacity(0.08), .clear],
-                    center: .topTrailing,
-                    startRadius: 0,
-                    endRadius: UIScreen.main.bounds.width * 1.5
-                )
-                .ignoresSafeArea()
-
-                VStack(spacing: 0) {
-                    // Terminal header
-                    VStack(spacing: 8) {
-                        // Show apartment target
-                        if let label = scanManager.selectedApartmentLabel {
-                            Text("// \(label.lowercased())")
-                                .font(.custom("Courier", size: 12))
-                                .foregroundStyle(RentleBrand.green)
-                                .tracking(0.5)
-                                .lineLimit(1)
-                        }
-
-                        Text("// review_scan.process")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(RentleBrand.textSecondary)
-                            .tracking(1.5)
-
-                        let roomCount = scanManager.capturedRooms.count
-                        let nodeCount = scanManager.tourBundle.nodes.count
-
-                        Text("\(roomCount) room\(roomCount == 1 ? "" : "s"), \(nodeCount) node\(nodeCount == 1 ? "" : "s")")
-                            .font(.system(size: 20, weight: .regular, design: .monospaced))
-                            .foregroundStyle(RentleBrand.textPrimary)
-
-                        Text("tap merge_and_export to\nbuild the 3D model")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(RentleBrand.textSecondary)
-                            .multilineTextAlignment(.center)
-                            .lineSpacing(4)
+            List {
+                // Summary section
+                Section {
+                    if let label = scanManager.selectedApartmentLabel {
+                        LabeledContent("Apartment", value: label)
                     }
-                    .padding(.top, 32)
-                    .padding(.bottom, 24)
 
-                    // ── Action buttons FIRST (above the fold) ──
-                    actionButtons
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 16)
+                    let roomCount = scanManager.capturedRooms.count
+                    let nodeCount = scanManager.tourBundle.nodes.count
+                    LabeledContent("Rooms", value: "\(roomCount)")
+                    LabeledContent("360° Nodes", value: "\(nodeCount)")
+                } header: {
+                    Text("Scan Summary")
+                }
 
-                    // ── Room list in terminal container ──
-                    VStack(spacing: 0) {
+                // Actions section
+                Section {
+                    // Merge & Export
+                    Button {
+                        Task {
+                            await scanManager.mergeRooms()
+                            await scanManager.exportUSDZ()
+                            if let url = scanManager.exportedFileURL {
+                                onExportComplete?(url)
+                            }
+                        }
+                    } label: {
                         HStack {
-                            Text("> scan_results[\(scanManager.capturedRooms.count)]")
-                                .font(.custom("Courier", size: 11))
-                                .foregroundStyle(RentleBrand.textSecondary)
-                                .tracking(1)
+                            Label(
+                                scanManager.isMerging ? "Merging…" :
+                                scanManager.isExporting ? "Exporting…" : "Merge & Export",
+                                systemImage: "square.and.arrow.down.on.square"
+                            )
                             Spacer()
-                            if scanManager.capturedRooms.isEmpty {
-                                Text("pending")
-                                    .font(.custom("Courier", size: 11))
-                                    .foregroundStyle(RentleBrand.orange)
-                                    .tracking(1)
+                            if scanManager.isMerging || scanManager.isExporting {
+                                ProgressView()
                             }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                    }
+                    .disabled(scanManager.isMerging || scanManager.isExporting)
 
-                        if scanManager.capturedRooms.isEmpty {
-                            // Guidance when no rooms are captured
-                            Text("// room data processed on merge")
-                                .font(.custom("Courier", size: 11))
-                                .foregroundStyle(RentleBrand.textMuted)
-                                .tracking(0.5)
-                                .padding(.horizontal, 16)
-                                .padding(.bottom, 10)
-                        } else {
-                            ForEach(Array(scanManager.capturedRooms.enumerated()), id: \.offset) { index, _ in
-                                HStack(spacing: 12) {
-                                    Text("✓")
-                                        .foregroundStyle(RentleBrand.green)
-                                    let name = scanManager.roomNames[index] ?? "Room \(index + 1)"
-                                    Text(name.lowercased().replacingOccurrences(of: " ", with: "_"))
-                                        .foregroundStyle(RentleBrand.textPrimary)
-                                    Spacer()
-                                    Text("captured")
-                                        .foregroundStyle(RentleBrand.green.opacity(0.6))
+                    // View Dollhouse
+                    if scanManager.exportedFileURL != nil {
+                        Button {
+                            showDollhouse = true
+                        } label: {
+                            Label("View 3D Model", systemImage: "view.3d")
+                        }
+                    }
+
+                    // Upload
+                    if scanManager.exportedFileURL != nil && scanManager.selectedApartmentId != nil {
+                        if scanManager.uploadStatus == .uploaded {
+                            HStack {
+                                Label("Uploaded", systemImage: "checkmark.icloud.fill")
+                                    .foregroundStyle(.green)
+                                Spacer()
+                                if let label = scanManager.selectedApartmentLabel {
+                                    Text(label)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
                                 }
-                                .font(.custom("Courier", size: 13))
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .background(RentleBrand.surface)
+                            }
+                        } else {
+                            Button {
+                                Task {
+                                    let token = authManager.authToken ?? ""
+                                    let baseURL = authManager.activeBaseURL
+                                    await scanManager.uploadTour(token: token, baseURL: baseURL)
+                                    if scanManager.uploadStatus == .uploaded {
+                                        onUploadComplete?()
+                                    }
+                                }
+                            } label: {
+                                HStack {
+                                    Label(
+                                        scanManager.isUploading ? "Uploading…" : "Upload Tour",
+                                        systemImage: "icloud.and.arrow.up"
+                                    )
+                                    Spacer()
+                                    if scanManager.isUploading {
+                                        ProgressView()
+                                    }
+                                }
+                            }
+                            .disabled(scanManager.isUploading)
+                        }
+
+                        // Upload error
+                        if let uploadErr = scanManager.uploadError {
+                            Label(uploadErr, systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+
+                    // Share
+                    if scanManager.exportedFileURL != nil {
+                        Button {
+                            scanManager.presentShareSheet()
+                        } label: {
+                            Label("Share File", systemImage: "square.and.arrow.up")
+                        }
+
+                        if scanManager.exportedTourURL != nil {
+                            Button {
+                                if let url = scanManager.exportedTourURL {
+                                    TourBundleExporter.share(url: url)
+                                }
+                            } label: {
+                                Label("Share Tour Bundle", systemImage: "square.and.arrow.up.on.square")
                             }
                         }
                     }
-                    .background(RentleBrand.surface)
-                    .overlay(
-                        Rectangle()
-                            .stroke(RentleBrand.border, lineWidth: 1)
-                    )
-                    .padding(.horizontal, 16)
+                } header: {
+                    Text("Actions")
+                }
 
-                    // Tour nodes summary (collapsed list with toggle)
-                    if !scanManager.tourBundle.nodes.isEmpty {
-                        tourNodesSummary
-                            .padding(.horizontal, 16)
-                            .padding(.top, 12)
+                // Rooms section
+                if !scanManager.capturedRooms.isEmpty {
+                    Section {
+                        ForEach(Array(scanManager.capturedRooms.enumerated()), id: \.offset) { index, _ in
+                            let name = scanManager.roomNames[index] ?? "Room \(index + 1)"
+                            Label(name, systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.primary)
+                        }
+                    } header: {
+                        Text("Captured Rooms")
                     }
+                }
 
-                    Spacer().frame(height: 30)
+                // Tour Nodes section
+                if !scanManager.tourBundle.nodes.isEmpty {
+                    Section {
+                        let nodesToShow = showAllNodes
+                            ? scanManager.tourBundle.nodes
+                            : Array(scanManager.tourBundle.nodes.prefix(3))
+
+                        ForEach(nodesToShow) { node in
+                            HStack {
+                                Label(node.label, systemImage: "mappin.circle.fill")
+                                Spacer()
+                                Text("(\(String(format: "%.1f", node.positionX)), \(String(format: "%.1f", node.positionY)), \(String(format: "%.1f", node.positionZ)))")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        if scanManager.tourBundle.nodes.count > 3 {
+                            Button {
+                                withAnimation {
+                                    showAllNodes.toggle()
+                                }
+                            } label: {
+                                Text(showAllNodes
+                                     ? "Show Less"
+                                     : "\(scanManager.tourBundle.nodes.count - 3) more nodes…")
+                                    .font(.subheadline)
+                            }
+                        }
+                    } header: {
+                        Text("360° Nodes (\(scanManager.tourBundle.nodes.count))")
+                    }
                 }
             }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(RentleBrand.background, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .listStyle(.insetGrouped)
+            .navigationTitle("Review")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
+                    Button("Done") {
                         dismiss()
-                    } label: {
-                        Text("< close")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(RentleBrand.green)
                     }
-                }
-                ToolbarItem(placement: .principal) {
-                    Text("// review")
-                        .font(.system(size: 13, design: .monospaced))
-                        .foregroundStyle(RentleBrand.textSecondary)
                 }
             }
             .alert("Notice", isPresented: $scanManager.showAlert) {
@@ -617,268 +528,6 @@ struct ReviewScreen: View {
                 )
             }
         }
-        .preferredColorScheme(.dark)
-    }
-
-    // MARK: - Action Buttons
-
-    private var actionButtons: some View {
-        VStack(spacing: 12) {
-            // Merge & Export USDZ
-            Button {
-                Task {
-                    await scanManager.mergeRooms()
-                    await scanManager.exportUSDZ()
-                    if let url = scanManager.exportedFileURL {
-                        onExportComplete?(url)
-                    }
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    if scanManager.isMerging || scanManager.isExporting {
-                        ProgressView()
-                            .tint(RentleBrand.background)
-                            .scaleEffect(0.8)
-                    }
-                    Text(scanManager.isMerging ? "merging..." :
-                            scanManager.isExporting ? "exporting..." : "merge_and_export />")
-                        .tracking(2)
-                }
-                .font(.custom("Courier", size: 14).weight(.bold))
-                .foregroundStyle(RentleBrand.background)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(Color(hex: "E8E6E3"))
-            }
-            .disabled(scanManager.isMerging || scanManager.isExporting)
-
-            // View in Dollhouse (after export)
-            if scanManager.exportedFileURL != nil {
-                Button {
-                    showDollhouse = true
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "view.3d")
-                            .font(.system(size: 14))
-                        Text("view_dollhouse />")
-                            .tracking(2)
-                    }
-                    .font(.custom("Courier", size: 14).weight(.bold))
-                    .foregroundStyle(RentleBrand.blue)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .overlay(
-                        Rectangle()
-                            .stroke(RentleBrand.blue, lineWidth: 1)
-                    )
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-
-            // ── Upload to Backend (primary action after export) ──
-            if scanManager.exportedFileURL != nil && scanManager.selectedApartmentId != nil {
-                VStack(spacing: 8) {
-                    if scanManager.uploadStatus == .uploaded {
-                        VStack(spacing: 6) {
-                            HStack(spacing: 8) {
-                                Text("✓")
-                                    .foregroundStyle(RentleBrand.green)
-                                Text("uploaded_to_server")
-                                    .foregroundStyle(RentleBrand.green)
-                                    .tracking(1)
-                            }
-                            .font(.custom("Courier", size: 14).weight(.bold))
-
-                            if let label = scanManager.selectedApartmentLabel {
-                                Text("→ \(label)")
-                                    .font(.custom("Courier", size: 11))
-                                    .foregroundStyle(RentleBrand.textSecondary)
-                                    .tracking(0.5)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.center)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(RentleBrand.green.opacity(0.1))
-                        .overlay(
-                            Rectangle()
-                                .stroke(RentleBrand.green.opacity(0.5), lineWidth: 1)
-                        )
-                    } else {
-                        Button {
-                            Task {
-                                let token = authManager.authToken ?? ""
-                                let baseURL = authManager.activeBaseURL
-                                await scanManager.uploadTour(token: token, baseURL: baseURL)
-                                if scanManager.uploadStatus == .uploaded {
-                                    onUploadComplete?()
-                                }
-                            }
-                        } label: {
-                            Group {
-                                if scanManager.isUploading {
-                                    HStack(spacing: 12) {
-                                        ProgressView()
-                                            .tint(RentleBrand.green)
-                                            .scaleEffect(0.8)
-                                        Text("uploading...")
-                                            .font(.custom("Courier", size: 14))
-                                            .foregroundStyle(RentleBrand.textSecondary)
-                                            .tracking(2)
-                                    }
-                                } else {
-                                    Text("upload_tour />")
-                                        .font(.custom("Courier", size: 14).weight(.bold))
-                                        .foregroundStyle(RentleBrand.background)
-                                        .tracking(2)
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(scanManager.isUploading ? Color(hex: "1A1A1A") : Color(hex: "E8E6E3"))
-                            .overlay(
-                                Rectangle().stroke(
-                                    scanManager.isUploading ? RentleBrand.border : Color(hex: "E8E6E3"),
-                                    lineWidth: 1
-                                )
-                            )
-                        }
-                        .disabled(scanManager.isUploading)
-                    }
-
-                    // Upload error message
-                    if let uploadErr = scanManager.uploadError {
-                        HStack(spacing: 0) {
-                            Text("✗ ")
-                                .font(.custom("Courier", size: 14))
-                                .foregroundStyle(Color(hex: "CF6679"))
-                            Text(uploadErr)
-                                .font(.custom("Courier", size: 12))
-                                .foregroundStyle(Color(hex: "CF6679"))
-                                .tracking(0.5)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(Color(hex: "CF6679").opacity(0.05))
-                        .overlay(Rectangle().stroke(Color(hex: "CF6679").opacity(0.4), lineWidth: 1))
-                    }
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-
-            // Share buttons row
-            if scanManager.exportedFileURL != nil {
-                HStack(spacing: 12) {
-                    Button {
-                        scanManager.presentShareSheet()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text("↑")
-                            Text("share_file")
-                                .tracking(1)
-                        }
-                        .font(.custom("Courier", size: 12).weight(.bold))
-                        .foregroundStyle(RentleBrand.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .overlay(
-                            Rectangle()
-                                .stroke(RentleBrand.border, lineWidth: 1)
-                        )
-                    }
-
-                    if scanManager.exportedTourURL != nil {
-                        Button {
-                            if let url = scanManager.exportedTourURL {
-                                TourBundleExporter.share(url: url)
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text("↑")
-                                Text("share_tour")
-                                    .tracking(1)
-                            }
-                            .font(.custom("Courier", size: 12).weight(.bold))
-                            .foregroundStyle(RentleBrand.green)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .overlay(
-                                Rectangle()
-                                    .stroke(RentleBrand.green.opacity(0.5), lineWidth: 1)
-                            )
-                        }
-                        .transition(.scale.combined(with: .opacity))
-                    }
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-    }
-
-    // MARK: - Tour Nodes Summary (Collapsible)
-
-    @State private var showAllNodes = false
-
-    private var tourNodesSummary: some View {
-        VStack(spacing: 0) {
-            // Header row with toggle
-            Button {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    showAllNodes.toggle()
-                }
-            } label: {
-                HStack {
-                    Text("> tour_nodes[\(scanManager.tourBundle.nodes.count)]")
-                        .font(.custom("Courier", size: 11))
-                        .foregroundStyle(RentleBrand.textSecondary)
-                        .tracking(1)
-                    Spacer()
-                    Text(showAllNodes ? "[collapse]" : "[expand]")
-                        .font(.custom("Courier", size: 10))
-                        .foregroundStyle(RentleBrand.textMuted)
-                        .tracking(0.5)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-            }
-
-            // Show first 3 nodes always, rest on expand
-            let nodesToShow = showAllNodes
-                ? scanManager.tourBundle.nodes
-                : Array(scanManager.tourBundle.nodes.prefix(3))
-
-            ForEach(nodesToShow) { node in
-                HStack(spacing: 12) {
-                    Text("◉")
-                        .foregroundStyle(RentleBrand.green)
-                    Text(node.label.lowercased().replacingOccurrences(of: " ", with: "_"))
-                        .foregroundStyle(RentleBrand.textPrimary)
-                    Spacer()
-                    Text("(\(String(format: "%.1f", node.positionX)), \(String(format: "%.1f", node.positionY)), \(String(format: "%.1f", node.positionZ)))")
-                        .foregroundStyle(RentleBrand.textMuted)
-                }
-                .font(.custom("Courier", size: 12))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(RentleBrand.surface)
-            }
-
-            // "and N more" indicator
-            if !showAllNodes && scanManager.tourBundle.nodes.count > 3 {
-                Text("// + \(scanManager.tourBundle.nodes.count - 3) more nodes")
-                    .font(.custom("Courier", size: 10))
-                    .foregroundStyle(RentleBrand.textMuted)
-                    .tracking(0.5)
-                    .padding(.vertical, 6)
-            }
-        }
-        .background(RentleBrand.surface)
-        .overlay(
-            Rectangle()
-                .stroke(RentleBrand.border, lineWidth: 1)
-        )
     }
 }
 

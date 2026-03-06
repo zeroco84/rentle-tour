@@ -26,7 +26,7 @@ struct DollhouseViewerScreen: View {
 
     var body: some View {
         ZStack {
-            RentleBrand.background.ignoresSafeArea()
+            Color(uiColor: .systemBackground).ignoresSafeArea()
 
             if isLoading {
                 loadingView
@@ -80,26 +80,22 @@ struct DollhouseViewerScreen: View {
 
     private var topBar: some View {
         HStack {
-            Button { dismiss() } label: {
-                Text("< back")
-                    .font(.custom("Courier", size: 12))
-                    .foregroundStyle(RentleBrand.green)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(RentleBrand.background.opacity(0.85))
-                    .overlay(Rectangle().stroke(RentleBrand.border, lineWidth: 1))
+            Button { dismiss() } label:{
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 36, height: 36)
+                    .background(.ultraThinMaterial, in: Circle())
             }
 
             Spacer()
 
-            Text("// dollhouse_view")
-                .font(.custom("Courier", size: 12))
-                .foregroundStyle(RentleBrand.textSecondary)
-                .tracking(1)
-                .padding(.horizontal, 12)
+            Text("3D Model")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(RentleBrand.background.opacity(0.85))
-                .overlay(Rectangle().stroke(RentleBrand.border, lineWidth: 1))
+                .background(.ultraThinMaterial, in: Capsule())
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -109,101 +105,77 @@ struct DollhouseViewerScreen: View {
 
     private var bottomBar: some View {
         VStack(spacing: 0) {
-            // Coverage legend (when coverage is visible and nodes exist)
+            // Coverage legend
             if showCoverage && !tourBundle.nodes.isEmpty {
                 HStack(spacing: 16) {
-                    legendItem(color: RentleBrand.green, label: "covered")
-                    legendItem(color: RentleBrand.orange, label: "borderline")
-                    legendItem(color: RentleBrand.red, label: "needs_capture")
+                    legendItem(color: .green, label: "Covered")
+                    legendItem(color: .orange, label: "Borderline")
+                    legendItem(color: .red, label: "Needs Capture")
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(RentleBrand.background.opacity(0.85))
+                .background(.ultraThinMaterial)
             }
 
             HStack {
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(RentleBrand.green)
-                        .frame(width: 8, height: 8)
-                        .shadow(color: RentleBrand.green.opacity(0.5), radius: 6)
-
-                    Text("nodes: \(tourBundle.nodes.count)")
-                        .font(.custom("Courier", size: 11))
-                        .foregroundStyle(RentleBrand.textSecondary)
-                        .tracking(1)
-                }
+                Label("\(tourBundle.nodes.count) Nodes", systemImage: "mappin.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
 
                 Spacer()
 
                 if !tourBundle.nodes.isEmpty {
-                    // Coverage toggle
                     Button {
                         showCoverage.toggle()
-                        // Post notification to toggle coverage grid visibility
                         NotificationCenter.default.post(
                             name: .toggleCoverageGrid,
                             object: nil,
                             userInfo: ["visible": showCoverage]
                         )
                     } label: {
-                        Text(showCoverage ? "[hide_coverage]" : "[show_coverage]")
-                            .font(.custom("Courier", size: 11))
-                            .foregroundStyle(showCoverage ? RentleBrand.green : RentleBrand.textMuted)
-                            .tracking(0.5)
+                        Label(
+                            showCoverage ? "Hide Coverage" : "Show Coverage",
+                            systemImage: showCoverage ? "eye.fill" : "eye.slash"
+                        )
+                        .font(.caption.weight(.medium))
                     }
                 } else {
-                    Text("tap a node to explore")
-                        .font(.custom("Courier", size: 11))
-                        .foregroundStyle(RentleBrand.textMuted)
-                        .tracking(1)
+                    Text("Tap a node to explore")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(RentleBrand.background.opacity(0.85))
+            .background(.ultraThinMaterial)
         }
     }
 
     private func legendItem(color: Color, label: String) -> some View {
         HStack(spacing: 4) {
-            Rectangle()
-                .fill(color.opacity(0.6))
-                .frame(width: 10, height: 10)
+            Circle()
+                .fill(color.opacity(0.7))
+                .frame(width: 8, height: 8)
             Text(label)
-                .font(.custom("Courier", size: 9))
-                .foregroundStyle(RentleBrand.textMuted)
-                .tracking(0.5)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 
     // MARK: - Loading View
 
     private var loadingView: some View {
-        VStack(spacing: 16) {
-            Text("// loading_3d_model")
-                .font(.custom("Courier", size: 13))
-                .foregroundStyle(RentleBrand.textSecondary)
-                .tracking(1.5)
-
-            ProgressView()
-                .tint(RentleBrand.green)
-        }
+        ProgressView("Loading 3D Model…")
+            .tint(.accentColor)
     }
 
     // MARK: - Error View
 
     private func errorView(_ error: String) -> some View {
-        VStack(spacing: 16) {
-            Text("✗ load_error")
-                .font(.custom("Courier", size: 14))
-                .foregroundStyle(Color(hex: "CF6679"))
-
+        ContentUnavailableView {
+            Label("Load Error", systemImage: "exclamationmark.triangle")
+        } description: {
             Text(error)
-                .font(.custom("Courier", size: 12))
-                .foregroundStyle(RentleBrand.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 36)
         }
     }
 }

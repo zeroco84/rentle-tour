@@ -2,8 +2,8 @@
 // RentleTour
 //
 // Full-screen image viewer for captured 360° node photos.
-// Displayed when a user taps a node in the Dollhouse view.
-// Supports pinch-to-zoom and drag-to-pan for exploration.
+// Supports pinch-to-zoom and drag-to-pan.
+// UI follows Apple iOS Human Interface Guidelines.
 
 import SwiftUI
 
@@ -29,14 +29,9 @@ struct PanoramaViewerScreen: View {
             Color.black.ignoresSafeArea()
 
             if isLoading {
-                VStack(spacing: 16) {
-                    ProgressView()
-                        .tint(RentleBrand.green)
-                    Text("// loading_panorama")
-                        .font(.custom("Courier", size: 12))
-                        .foregroundStyle(RentleBrand.textSecondary)
-                        .tracking(1)
-                }
+                ProgressView("Loading…")
+                    .tint(.white)
+                    .foregroundStyle(.white)
             } else if let image = image {
                 // Zoomable/pannable image viewer
                 Image(uiImage: image)
@@ -92,14 +87,10 @@ struct PanoramaViewerScreen: View {
                             }
                     )
             } else {
-                VStack(spacing: 16) {
-                    Text("✗ image_not_found")
-                        .font(.custom("Courier", size: 14))
-                        .foregroundStyle(Color(hex: "CF6679"))
-
+                ContentUnavailableView {
+                    Label("Image Not Found", systemImage: "photo.badge.exclamationmark")
+                } description: {
                     Text(node.imageFileName)
-                        .font(.custom("Courier", size: 12))
-                        .foregroundStyle(RentleBrand.textSecondary)
                 }
             }
 
@@ -107,54 +98,50 @@ struct PanoramaViewerScreen: View {
             VStack {
                 HStack {
                     Button { dismiss() } label: {
-                        Text("× close")
-                            .font(.custom("Courier", size: 12))
-                            .foregroundStyle(RentleBrand.green)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(RentleBrand.background.opacity(0.85))
-                            .overlay(Rectangle().stroke(RentleBrand.border, lineWidth: 1))
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(.ultraThinMaterial, in: Circle())
                     }
 
                     Spacer()
 
                     // Node info badge
-                    Text(node.label.lowercased().replacingOccurrences(of: " ", with: "_"))
-                        .font(.custom("Courier", size: 12))
-                        .foregroundStyle(RentleBrand.textPrimary)
-                        .tracking(1)
-                        .padding(.horizontal, 12)
+                    Text(node.label)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(RentleBrand.background.opacity(0.85))
-                        .overlay(Rectangle().stroke(RentleBrand.border, lineWidth: 1))
+                        .background(.ultraThinMaterial, in: Capsule())
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
 
                 Spacer()
 
-                // Position info
+                // Bottom info bar
                 HStack {
-                    Text("pos: (\(String(format: "%.2f", node.positionX)), \(String(format: "%.2f", node.positionY)), \(String(format: "%.2f", node.positionZ)))")
-                        .font(.custom("Courier", size: 10))
-                        .foregroundStyle(RentleBrand.textMuted)
-                        .tracking(1)
+                    Label(
+                        "(\(String(format: "%.2f", node.positionX)), \(String(format: "%.2f", node.positionY)), \(String(format: "%.2f", node.positionZ)))",
+                        systemImage: "location.circle"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.7))
 
                     Spacer()
 
-                    Text("pinch to zoom · double-tap to reset")
-                        .font(.custom("Courier", size: 10))
-                        .foregroundStyle(RentleBrand.textMuted)
-                        .tracking(1)
+                    Text("Pinch to zoom · Double-tap to reset")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.5))
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(RentleBrand.background.opacity(0.7))
+                .padding(.vertical, 10)
+                .background(.ultraThinMaterial)
             }
         }
         .preferredColorScheme(.dark)
         .task {
-            // Load the image from the tour bundle
             image = tourBundle.loadNodeImage(for: node)
             isLoading = false
         }
