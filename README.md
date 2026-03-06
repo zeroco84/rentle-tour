@@ -318,9 +318,10 @@ file: <PropertyName_2026-03-06T13-33-04Z.rentletour>  (application/zip)
 
 ```json
 {
-  "status": "queued",
-  "message": "Tour uploaded and queued for processing",
-  "apartment_id": 895
+  "success": true,
+  "apartment_id": 895,
+  "tour_processing_status": "queued",
+  "message": "Tour bundle uploaded and queued for processing"
 }
 ```
 
@@ -328,8 +329,9 @@ file: <PropertyName_2026-03-06T13-33-04Z.rentletour>  (application/zip)
 
 ```json
 {
-  "status": "completed",
   "apartment_id": 895,
+  "tour_processing_status": "completed",
+  "tour_processing_error": null,
   "tour_model_url": "https://cdn.example.com/tours/895/model.glb",
   "tour_nav_graph": {
     "nodes": [
@@ -345,10 +347,12 @@ file: <PropertyName_2026-03-06T13-33-04Z.rentletour>  (application/zip)
 }
 ```
 
+> **Status values:** `queued` → `processing` → `completed` | `failed`
+
 ### Fargate → Backend Callback
 
 ```http
-POST /api/v1/internal/tour_callback
+PATCH /api/v1/internal/tour_callback
 X-Rentle-Task-Secret: <shared_secret>
 Content-Type: application/json
 
@@ -368,7 +372,7 @@ Content-Type: application/json
 A ZIP archive containing all scan data:
 
 ```
-PropertyName_Tour.rentletour
+PropertyName_YYYY-MM-DDTHH-MM-SSZ.rentletour (ZIP)
 ├── structure.usdz             # 3D model of the scanned space
 ├── tour_data.json             # Manifest (see below)
 ├── panoramas/
@@ -383,6 +387,12 @@ PropertyName_Tour.rentletour
     ├── fireplace.usdz
     └── ...
 ```
+
+> **Validation rules:**
+> - Every entry in `images[]` / `nodes[]` MUST have a corresponding file in the ZIP
+> - Every entry MUST have a `transform` array of exactly 16 floats (4×4 camera matrix)
+> - Accepted image formats: `.jpg`, `.jpeg`, `.png`, `.heic`
+> - The manifest filename can be `tour_data.json` OR `manifest.json`
 
 ### Manifest (`tour_data.json`)
 

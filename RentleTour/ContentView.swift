@@ -6,6 +6,16 @@
 
 import SwiftUI
 
+// MARK: - Tour Filter
+
+enum TourFilter: String, CaseIterable, Identifiable {
+    case pending = "Pending"
+    case completed = "Completed"
+    case archived = "Archived"
+
+    var id: String { rawValue }
+}
+
 // MARK: - Data Model
 
 struct Property: Identifiable {
@@ -17,6 +27,14 @@ struct Property: Identifiable {
     var exportedURL: URL?
     var uploadStatus: UploadStatus = .pending
     var dateCreated: Date = .now
+    var isArchived: Bool = false
+
+    /// Computed tour filter based on upload status and archive flag
+    var tourFilter: TourFilter {
+        if isArchived { return .archived }
+        if uploadStatus == .uploaded { return .completed }
+        return .pending
+    }
 }
 
 // MARK: - Rentle Brand Colors (Splash / Login only)
@@ -65,12 +83,30 @@ struct ContentView: View {
     @State private var showBrowseTours = false
     @State private var availableTours: [ApartmentTourData] = []
     @State private var tourAlertMessage: String? = nil
+    @State private var selectedFilter: TourFilter = .pending
+
+    /// Properties filtered by the selected pill tab
+    private var filteredProperties: [Property] {
+        properties.filter { $0.tourFilter == selectedFilter }
+    }
 
     var body: some View {
         NavigationStack {
-            Group {
-                if properties.isEmpty {
-                    emptyStateView
+            VStack(spacing: 0) {
+                // Pill segmented control
+                Picker("Filter", selection: $selectedFilter) {
+                    ForEach(TourFilter.allCases) { filter in
+                        Text(filter.rawValue)
+                            .tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+
+                // Content
+                if filteredProperties.isEmpty {
+                    emptyStateForFilter
                 } else {
                     propertyListView
                 }
@@ -191,6 +227,7 @@ struct ContentView: View {
                     if let idx = activePropertyIndex {
                         properties[idx].roomCount = 0
                         properties[idx].uploadStatus = .pending
+                        properties[idx].isArchived = false
                     }
                     guard DeviceCapability.supportsLiDAR else {
                         showUnsupportedAlert = true
@@ -198,42 +235,71 @@ struct ContentView: View {
                     }
                     showScanner = true
                 }
+                if let idx = activePropertyIndex {
+                    if properties[idx].isArchived {
+                        Button("Restore from Archive") {
+                            withAnimation { properties[idx].isArchived = false }
+                        }
+                    } else if properties[idx].uploadStatus == .uploaded {
+                        Button("Archive Tour", role: .destructive) {
+                            withAnimation { properties[idx].isArchived = true }
+                        }
+                    }
+                }
                 Button("Cancel", role: .cancel) {}
             }
         }
     }
 
-    // MARK: - Empty State
+    // MARK: - Empty States
 
-    private var emptyStateView: some View {
-        ContentUnavailableView {
-            Label("No Tours", systemImage: "camera.viewfinder")
-        } description: {
-            Text("Tap the + button to select an apartment and start scanning.")
-        } actions: {
-            Button {
-                startNewProperty()
-            } label: {
-                Text("New Tour")
+    private var emptyStateForFilter: some View {
+        Group {
+            switch selectedFilter {
+            case .pending:
+                ContentUnavailableView {
+                    Label("No Pending Tours", systemImage: "camera.viewfinder")
+                } description: {
+                    Text("Tap the + button to select an apartment and start scanning.")
+                } actions: {
+                    Button {
+                        startNewProperty()
+                    } label: {
+                        Text("New Tour")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            case .completed:
+                ContentUnavailableView {
+                    Label("No Completed Tours", systemImage: "checkmark.circle")
+                } description: {
+                    Text("Tours will appear here once uploaded and processed.")
+                }
+            case .archived:
+                ContentUnavailableView {
+                    Label("No Archived Tours", systemImage: "archivebox")
+                } description: {
+                    Text("Archived tours from previous scans will appear here.")
+                }
             }
-            .buttonStyle(.borderedProminent)
         }
+        .frame(maxHeight: .infinity)
     }
 
     // MARK: - Property List
 
     private var propertyListView: some View {
         List {
-            Section {
-                ForEach(Array(properties.enumerated()), id: \.element.id) { index, property in
-                    PropertyRow(property: property)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
+            ForEach(filteredProperties) { property in
+                PropertyRow(property: property)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if let index = properties.firstIndex(where: { $0.id == property.id }) {
                             activePropertyIndex = index
                             scanManager.selectedApartmentId = property.apartmentId
                             scanManager.selectedApartmentLabel = property.name
 
-                            if property.roomCount > 0 || property.uploadStatus == .uploaded {
+                            if property.roomCount > 0 || property.uploadStatus == .uploaded || property.isArchived {
                                 showPropertyActions = true
                             } else {
                                 scanManager.clearAll()
@@ -244,11 +310,28 @@ struct ContentView: View {
                                 showScanner = true
                             }
                         }
-                }
-            } header: {
-                if let user = authManager.user {
-                    Text("Logged in as \(user.displayName)")
-                }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if property.isArchived {
+                            Button {
+                                if let index = properties.firstIndex(where: { $0.id == property.id }) {
+                                    withAnimation { properties[index].isArchived = false }
+                                }
+                            } label: {
+                                Label("Restore", systemImage: "arrow.uturn.backward")
+                            }
+                            .tint(.blue)
+                        } else {
+                            Button {
+                                if let index = properties.firstIndex(where: { $0.id == property.id }) {
+                                    withAnimation { properties[index].isArchived = true }
+                                }
+                            } label: {
+                                Label("Archive", systemImage: "archivebox")
+                            }
+                            .tint(.orange)
+                        }
+                    }
             }
         }
         .listStyle(.insetGrouped)

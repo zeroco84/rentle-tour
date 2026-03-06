@@ -79,21 +79,29 @@ final class TourBundleExporter {
             throw ExportError.noStructure
         }
 
-        // 2. Copy panorama images
+        // 2. Copy panorama images (track which ones actually exist)
+        var copiedNodeFileNames: Set<String> = []
         for node in tourBundle.nodes {
             let sourceURL = tourBundle.panoramasDirectory.appendingPathComponent(node.imageFileName)
             let destURL = panoramasDir.appendingPathComponent(node.imageFileName)
             if fm.fileExists(atPath: sourceURL.path) {
                 try fm.copyItem(at: sourceURL, to: destURL)
+                copiedNodeFileNames.insert(node.imageFileName)
+            } else {
+                print("[TourExporter] ⚠ Panorama not found, skipping: \(node.imageFileName)")
             }
         }
 
-        // 3. Copy auto-captured textures
+        // 3. Copy auto-captured textures (track which ones actually exist)
+        var copiedTextureFileNames: Set<String> = []
         for texture in tourBundle.textureFrames {
             let sourceURL = tourBundle.texturesDirectory.appendingPathComponent(texture.imageFileName)
             let destURL = texturesDir.appendingPathComponent(texture.imageFileName)
             if fm.fileExists(atPath: sourceURL.path) {
                 try fm.copyItem(at: sourceURL, to: destURL)
+                copiedTextureFileNames.insert(texture.imageFileName)
+            } else {
+                print("[TourExporter] ⚠ Texture not found, skipping: \(texture.imageFileName)")
             }
         }
 
@@ -106,8 +114,16 @@ final class TourBundleExporter {
             }
         }
 
-        // 4. Generate tour_data.json
-        let manifest = tourBundle.buildManifest(roomCount: rooms.count)
+        // 5. Generate tour_data.json — only include entries with actual files in the ZIP
+        var manifest = tourBundle.buildManifest(roomCount: rooms.count)
+        manifest.nodes = manifest.nodes.filter { copiedNodeFileNames.contains($0.imageFileName) }
+        manifest.textureFrames = manifest.textureFrames.filter { copiedTextureFileNames.contains($0.imageFileName) }
+
+        let skippedNodes = tourBundle.nodes.count - manifest.nodes.count
+        let skippedTextures = tourBundle.textureFrames.count - manifest.textureFrames.count
+        if skippedNodes > 0 || skippedTextures > 0 {
+            print("[TourExporter] ⚠ Filtered manifest: skipped \(skippedNodes) node(s), \(skippedTextures) texture(s) with missing files")
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
