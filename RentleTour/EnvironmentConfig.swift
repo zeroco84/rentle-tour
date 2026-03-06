@@ -52,8 +52,8 @@ struct EnvironmentConfig {
     /// Default base URL (before subdomain is entered)
     static var defaultBaseURL: String {
         if isProduction {
-            return "https://vesta.rentle.ai"
+            return "https://your-instance.rentle.ai"
         }
-        return "https://staging.vesta.rentle.ai"
+        return "https://staging.your-instance.rentle.ai"
     }
 }

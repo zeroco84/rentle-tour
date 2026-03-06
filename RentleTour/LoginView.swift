@@ -229,7 +229,7 @@ struct LoginScreen: View {
 
             // Subdomain field + suffix
             HStack(spacing: 0) {
-                TextField("vesta", text: $subdomain)
+                TextField("your-instance", text: $subdomain)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .font(.custom("Courier", size: 15))

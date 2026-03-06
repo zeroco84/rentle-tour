@@ -64,7 +64,7 @@ final class ApartmentService {
     /// - Parameters:
     ///   - query: Search string (minimum 2 characters)
     ///   - token: Bearer auth token
-    ///   - baseURL: The instance base URL (e.g. https://vesta.rentle.ai)
+    ///   - baseURL: The instance base URL (e.g. https://your-instance.rentle.ai)
     /// - Returns: Array of matching apartments
     static func searchApartments(
         query: String,
